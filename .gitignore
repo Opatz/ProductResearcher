@@ -1,0 +1,207 @@
+# Environment & Keys
+.env
+config/config.ini
+
+# ==========================================
+# Python & Bytecode
+# ==========================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+
+# ==========================================
+# Temporary & Log Files
+# ==========================================
+temp/
+*.tmp
+*.log
+
+# ==========================================
+# Large Archives / WhatsApp Dumps
+# ==========================================
+*.zip
+*.tar.gz
+*.tgz
+*.rar
+*.7z
+
+# ==========================================
+# Input Processing Directories
+# ==========================================
+input/artikel/
+input/raw/
+input/processed/
+
+# ==========================================
+# Media Files (Images & Videos) in input/
+# ==========================================
+# Images
+input/**/*.jpg
+input/**/*.jpeg
+input/**/*.png
+input/**/*.webp
+input/**/*.bmp
+input/**/*.heic
+input/**/*.tif
+input/**/*.tiff
+input/**/*.gif
+input/**/*.img
+input/**/*.JPG
+input/**/*.JPEG
+input/**/*.PNG
+input/**/*.WEBP
+input/**/*.BMP
+input/**/*.HEIC
+input/**/*.TIF
+input/**/*.TIFF
+input/**/*.GIF
+input/**/*.IMG
+
+# Videos
+input/**/*.mp4
+input/**/*.mov
+input/**/*.mkv
+input/**/*.avi
+input/**/*.webm
+input/**/*.m4v
+input/**/*.MP4
+input/**/*.MOV
+input/**/*.MKV
+input/**/*.AVI
+input/**/*.WEBM
+input/**/*.M4V
+
+# Direct input root fallback
+input/*.jpg
+input/*.jpeg
+input/*.png
+input/*.webp
+input/*.bmp
+input/*.heic
+input/*.tif
+input/*.tiff
+input/*.gif
+input/*.JPG
+input/*.JPEG
+input/*.PNG
+input/*.WEBP
+input/*.BMP
+input/*.HEIC
+input/*.mp4
+input/*.mov
+input/*.mkv
+input/*.avi
+input/*.webm
+input/*.m4v
+input/*.MP4
+input/*.MOV
+input/*.MKV
+input/*.AVI
+input/*.WEBM
+input/*.M4V
+
+# ==========================================
+# Media Files (Images & Videos) in output/
+# ==========================================
+# Images
+output/**/*.jpg
+output/**/*.jpeg
+output/**/*.png
+output/**/*.webp
+output/**/*.bmp
+output/**/*.heic
+output/**/*.tif
+output/**/*.tiff
+output/**/*.gif
+output/**/*.img
+output/**/*.JPG
+output/**/*.JPEG
+output/**/*.PNG
+output/**/*.WEBP
+output/**/*.BMP
+output/**/*.HEIC
+output/**/*.TIF
+output/**/*.TIFF
+output/**/*.GIF
+output/**/*.IMG
+
+# Videos
+output/**/*.mp4
+output/**/*.mov
+output/**/*.mkv
+output/**/*.avi
+output/**/*.webm
+output/**/*.m4v
+output/**/*.MP4
+output/**/*.MOV
+output/**/*.MKV
+output/**/*.AVI
+output/**/*.WEBM
+output/**/*.M4V
+
+# Direct output root fallback
+output/*.jpg
+output/*.jpeg
+output/*.png
+output/*.webp
+output/*.bmp
+output/*.heic
+output/*.tif
+output/*.tiff
+output/*.gif
+output/*.JPG
+output/*.JPEG
+output/*.PNG
+output/*.WEBP
+output/*.BMP
+output/*.HEIC
+output/*.mp4
+output/*.mov
+output/*.mkv
+output/*.avi
+output/*.webm
+output/*.m4v
+output/*.MP4
+output/*.MOV
+output/*.MKV
+output/*.AVI
+output/*.WEBM
+output/*.M4V
+
+# ==========================================
+# General Videos (Repo-wide)
+# ==========================================
+*.mp4
+*.mov
+*.mkv
+*.avi
+*.webm
+*.m4v
+*.MP4
+*.MOV
+*.MKV
+*.AVI
+*.WEBM
+*.M4V
+
+# ==========================================
+# Output Directory
+# ==========================================
+output/
+input/artikel/
+input/processed/
+input/raw/
+input/temp/
+
+# ==========================================
+# Keep Structure & Documentation
+# ==========================================
+!input/**/README.md
+!input/**/.gitkeep
+!output/**/README.md
+!output/**/.gitkeep
