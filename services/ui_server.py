@@ -122,14 +122,19 @@ def parse_multipart_form_data(body: bytes, content_type_header: str) -> List[Tup
     if "boundary=" not in content_type_header:
         return files
 
-    boundary_token = content_type_header.split("boundary=")[1].split(";")[0].strip().strip('"')
+    boundary_token = content_type_header.split("boundary=")[1].split(";")[0].strip().strip('"').strip("'")
     boundary = ("--" + boundary_token).encode("utf-8")
-    delimiter = boundary
 
-    parts = body.split(delimiter)
+    parts = body.split(boundary)
     for part in parts:
         if not part or part == b"--\r\n" or part == b"--" or part.startswith(b"--"):
             continue
+
+        # Trim leading CRLF from part if present
+        if part.startswith(b"\r\n"):
+            part = part[2:]
+        elif part.startswith(b"\n"):
+            part = part[1:]
 
         # Header und Content trennen
         if b"\r\n\r\n" in part:
@@ -148,12 +153,18 @@ def parse_multipart_form_data(body: bytes, content_type_header: str) -> List[Tup
         header_text = header_block.decode("utf-8", errors="replace")
         filename = None
         for line in header_text.splitlines():
-            if "Content-Disposition:" in line and "filename=" in line:
-                match = re.search(r'filename="?([^";\r\n]+)"?', line)
-                if match:
-                    filename = Path(match.group(1)).name
+            if "content-disposition:" in line.lower() and "filename=" in line.lower():
+                m_quoted = re.search(r'filename="([^"]+)"', line, re.IGNORECASE)
+                if m_quoted:
+                    raw_fn = m_quoted.group(1)
+                    filename = re.split(r'[\\/]', raw_fn)[-1]
+                else:
+                    m_unquoted = re.search(r'filename=([^;\r\n]+)', line, re.IGNORECASE)
+                    if m_unquoted:
+                        raw_fn = m_unquoted.group(1).strip().strip('"').strip("'")
+                        filename = re.split(r'[\\/]', raw_fn)[-1]
 
-        if filename and content_block:
+        if filename and content_block is not None:
             files.append((filename, content_block))
 
     return files
@@ -800,8 +811,8 @@ HTML_DASHBOARD = """<!DOCTYPE html>
             <div class="dropzone-icon">📁</div>
             <div class="dropzone-text">Fotos & Videos hier hineinziehen</div>
             <div class="dropzone-hint">oder klicken zum Auswählen (JPG, PNG, HEIC, WEBP, MP4, MOV, MKV)</div>
-            <input type="file" id="file-input" multiple accept="image/*,video/*,.heic,.mov,.mkv,.avi,.mp4,.jpg,.jpeg,.png,.webp" style="display: none;" onchange="handleFileSelect(event)">
           </div>
+          <input type="file" id="file-input" multiple accept="image/*,video/*,.heic,.mov,.mkv,.avi,.mp4,.jpg,.jpeg,.png,.webp" style="display: none;" onchange="handleFileSelect(event)">
         </div>
 
         <!-- Staged Files Grid/List -->
@@ -1183,16 +1194,31 @@ HTML_DASHBOARD = """<!DOCTYPE html>
 
     function handleFileSelect(event) {
       const files = event.target.files;
-      if (files.length > 0) {
+      if (files && files.length > 0) {
         uploadFiles(files);
       }
+      event.target.value = "";
     }
 
     async function uploadFiles(files) {
+      if (!files || files.length === 0) return;
+      const dz = document.getElementById("dropzone");
+      if (dz) dz.style.opacity = "0.6";
+
       showToast(`Lade ${files.length} Datei(en) hoch...`);
       const formData = new FormData();
+      let validCount = 0;
       for (let i = 0; i < files.length; i++) {
-        formData.append("files", files[i]);
+        if (files[i].name) {
+          formData.append("files", files[i], files[i].name);
+          validCount++;
+        }
+      }
+
+      if (validCount === 0) {
+        showToast("⚠️ Keine gültigen Dateien zum Hochladen gefunden.");
+        if (dz) dz.style.opacity = "1.0";
+        return;
       }
 
       try {
@@ -1200,15 +1226,27 @@ HTML_DASHBOARD = """<!DOCTYPE html>
           method: "POST",
           body: formData
         });
+        
+        if (!res.ok) {
+          const errText = await res.text();
+          throw new Error(`HTTP ${res.status}: ${errText}`);
+        }
+
         const data = await res.json();
         if (data.success) {
           showToast(`✅ ${data.count} Datei(en) erfolgreich in input/raw/ gespeichert!`);
-          loadStagedMedia();
+          await loadStagedMedia();
         } else {
           showToast("❌ Upload-Fehler: " + (data.error || "Unbekannt"));
+          alert("Fehler beim Upload: " + (data.error || "Unbekannt"));
         }
       } catch (err) {
         showToast("❌ Upload fehlgeschlagen: " + err.message);
+        alert("Upload fehlgeschlagen: " + err.message);
+      } finally {
+        if (dz) dz.style.opacity = "1.0";
+        const fi = document.getElementById("file-input");
+        if (fi) fi.value = "";
       }
     }
 
@@ -1825,35 +1863,45 @@ class StudioHTTPRequestHandler(BaseHTTPRequestHandler):
 
     def _handle_upload(self, body: bytes, content_type: str):
         """Speichert hochgeladene Dateien sicher in raw_dir."""
-        raw_dir = self.config.pipeline.raw_dir
-        raw_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            raw_dir = self.config.pipeline.raw_dir
+            raw_dir.mkdir(parents=True, exist_ok=True)
 
-        files = parse_multipart_form_data(body, content_type)
-        saved_files = []
+            files = parse_multipart_form_data(body, content_type)
+            saved_files = []
 
-        if files:
-            for fname, data in files:
-                clean_name = Path(fname).name
-                dest = raw_dir / clean_name
-                with open(dest, "wb") as f:
-                    f.write(data)
-                saved_files.append(clean_name)
-        elif body:
-            # Fallback direkte Dateibereitstellung
-            query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
-            fname = query.get("filename", ["uploaded_file.jpg"])[0]
-            clean_name = Path(fname).name
-            dest = raw_dir / clean_name
-            with open(dest, "wb") as f:
-                f.write(body)
-            saved_files.append(clean_name)
+            if files:
+                for fname, data in files:
+                    clean_name = re.split(r'[\\/]', fname)[-1].strip()
+                    if clean_name:
+                        dest = raw_dir / clean_name
+                        with open(dest, "wb") as f:
+                            f.write(data)
+                        saved_files.append(clean_name)
+            elif body:
+                # Fallback direkte Dateibereitstellung
+                query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+                fname = query.get("filename", ["uploaded_file.jpg"])[0]
+                clean_name = re.split(r'[\\/]', fname)[-1].strip()
+                if clean_name:
+                    dest = raw_dir / clean_name
+                    with open(dest, "wb") as f:
+                        f.write(body)
+                    saved_files.append(clean_name)
 
-        self._set_headers("application/json; charset=utf-8")
-        self.wfile.write(json.dumps({
-            "success": True,
-            "count": len(saved_files),
-            "files": saved_files
-        }).encode("utf-8"))
+            self._set_headers("application/json; charset=utf-8")
+            self.wfile.write(json.dumps({
+                "success": True,
+                "count": len(saved_files),
+                "files": saved_files
+            }).encode("utf-8"))
+        except Exception as e:
+            logger.error(f"Fehler bei _handle_upload: {e}", exc_info=True)
+            self._set_headers("application/json; charset=utf-8", 500)
+            self.wfile.write(json.dumps({
+                "success": False,
+                "error": str(e)
+            }).encode("utf-8"))
 
     def _handle_get_items(self):
         target_file = self.__class__.current_file_path or find_latest_execution_file(self.config.pipeline.output_dir)
