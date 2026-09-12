@@ -807,12 +807,17 @@ HTML_DASHBOARD = """<!DOCTYPE html>
             <span style="font-size: 12px; font-weight: normal; color: var(--text-muted);">Ziel: input/raw/</span>
           </div>
           
-          <div class="dropzone" id="dropzone" onclick="document.getElementById('file-input').click()">
+          <div class="dropzone" id="dropzone" onclick="openFilePicker(event)">
             <div class="dropzone-icon">📁</div>
             <div class="dropzone-text">Fotos & Videos hier hineinziehen</div>
-            <div class="dropzone-hint">oder klicken zum Auswählen (JPG, PNG, HEIC, WEBP, MP4, MOV, MKV)</div>
+            <div class="dropzone-hint">oder Buttons unten nutzen (JPG, PNG, HEIC, WEBP, MP4, MOV, MKV etc.)</div>
+            <div style="display: flex; gap: 10px; margin-top: 10px;" onclick="event.stopPropagation()">
+              <button type="button" class="btn btn-primary" style="padding: 8px 16px; font-size: 13px;" onclick="openFilePicker(event)">📂 Dateien auswählen</button>
+              <button type="button" class="btn btn-outline" style="padding: 8px 16px; font-size: 13px;" onclick="openFolderPicker(event)">📁 Ordner auswählen</button>
+            </div>
           </div>
-          <input type="file" id="file-input" multiple accept="image/*,video/*,.heic,.mov,.mkv,.avi,.mp4,.jpg,.jpeg,.png,.webp" style="display: none;" onchange="handleFileSelect(event)">
+          <input type="file" id="file-input" multiple style="position: absolute; left: -9999px; opacity: 0; width: 1px; height: 1px;" onchange="handleFileSelect(event)">
+          <input type="file" id="folder-input" webkitdirectory directory multiple style="position: absolute; left: -9999px; opacity: 0; width: 1px; height: 1px;" onchange="handleFileSelect(event)">
         </div>
 
         <!-- Staged Files Grid/List -->
@@ -1191,6 +1196,18 @@ HTML_DASHBOARD = """<!DOCTYPE html>
         uploadFiles(files);
       }
     });
+
+    function openFilePicker(event) {
+      if (event) { event.preventDefault(); event.stopPropagation(); }
+      const input = document.getElementById("file-input");
+      if (input) input.click();
+    }
+
+    function openFolderPicker(event) {
+      if (event) { event.preventDefault(); event.stopPropagation(); }
+      const input = document.getElementById("folder-input");
+      if (input) input.click();
+    }
 
     function handleFileSelect(event) {
       const files = event.target.files;
