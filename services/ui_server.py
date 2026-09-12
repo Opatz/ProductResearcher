@@ -3,6 +3,7 @@ import re
 import io
 import json
 import time
+import shutil
 import logging
 import threading
 import traceback
@@ -76,6 +77,40 @@ def find_item_images(item_id: str, item_name: str, base_dir: Path) -> List[Path]
                     return images
 
     return images
+
+
+def find_item_videos(item_id: str, item_name: str, base_dir: Path) -> List[Path]:
+    """Findet alle zugehörigen Videodateien für einen Artikel."""
+    videos: List[Path] = []
+    video_exts = {".mp4", ".mov", ".mkv", ".avi", ".webm"}
+
+    search_dirs = [
+        base_dir / "input" / "completed",
+        base_dir / "input" / "artikel",
+        base_dir / "input" / "processed",
+        base_dir / "input" / "raw",
+        base_dir / "output"
+    ]
+
+    target_names = {
+        item_id.strip().lower(),
+        f"artikel_{item_id}".lower(),
+        item_name.strip().lower(),
+        f"artikel_{item_name}".lower()
+    }
+
+    for root_dir in search_dirs:
+        if not root_dir.exists():
+            continue
+        for sub in root_dir.iterdir():
+            if sub.is_dir() and sub.name.lower() in target_names:
+                for f in sorted(sub.iterdir(), key=lambda x: x.name):
+                    if f.is_file() and f.suffix.lower() in video_exts:
+                        videos.append(f)
+                if videos:
+                    return videos
+
+    return videos
 
 
 def parse_multipart_form_data(body: bytes, content_type_header: str) -> List[Tuple[str, bytes]]:
@@ -423,8 +458,9 @@ HTML_DASHBOARD = """<!DOCTYPE html>
       --accent: #2e75b6;
       --accent-light: #eef6fc;
       --success: #28a745;
-      --warning: #ffc107;
+      --warning: #f59e0b;
       --danger: #dc3545;
+      --danger-light: #fee2e2;
       --bg: #f4f6f9;
       --card: #ffffff;
       --border: #e2e8f0;
@@ -535,24 +571,64 @@ HTML_DASHBOARD = """<!DOCTYPE html>
     }
 
     /* ========================================================= */
-    /* TAB 2: SPLIT SCREEN REVIEW (EXISTING WORKSPACE) */
+    /* TAB 2: SPLIT SCREEN REVIEW (STUDIO) */
     /* ========================================================= */
     .main-container { display: flex; flex: 1; overflow: hidden; }
-    .sidebar { width: 300px; background: var(--card); border-right: 1px solid var(--border); display: flex; flex-direction: column; }
-    .sidebar-header { padding: 14px 16px; border-bottom: 1px solid var(--border); font-size: 14px; font-weight: bold; background: #fafbfc; }
+    
+    /* Left Sidebar */
+    .sidebar { width: 330px; min-width: 300px; background: var(--card); border-right: 1px solid var(--border); display: flex; flex-direction: column; }
+    .sidebar-header { padding: 12px 16px; border-bottom: 1px solid var(--border); background: #fafbfc; display: flex; flex-direction: column; gap: 10px; }
+    .sidebar-search-box { display: flex; align-items: center; position: relative; }
+    .sidebar-search-input { width: 100%; padding: 7px 10px 7px 30px; border: 1px solid var(--border); border-radius: 6px; font-size: 12px; background: #fff; }
+    .sidebar-search-icon { position: absolute; left: 9px; font-size: 13px; color: var(--text-muted); }
+    
+    /* Filter Pills */
+    .filter-pills { display: flex; gap: 4px; overflow-x: auto; padding-bottom: 2px; }
+    .filter-pill {
+      padding: 4px 9px; border-radius: 12px; font-size: 11px; font-weight: 600;
+      background: #f1f5f9; border: 1px solid var(--border); color: var(--text-muted);
+      cursor: pointer; white-space: nowrap; transition: all 0.15s;
+    }
+    .filter-pill:hover { background: #e2e8f0; color: var(--text); }
+    .filter-pill.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+
     .item-list { flex: 1; overflow-y: auto; list-style: none; }
-    .item-card { padding: 12px 16px; border-bottom: 1px solid var(--border); cursor: pointer; transition: all 0.15s ease; }
+    
+    .item-card {
+      padding: 10px 14px; border-bottom: 1px solid var(--border); cursor: pointer;
+      display: flex; gap: 10px; align-items: center; transition: all 0.15s ease;
+      position: relative;
+    }
     .item-card:hover { background: #f0f7ff; }
     .item-card.active { background: #e3f2fd; border-left: 4px solid var(--accent); }
-    .item-card-title { font-size: 13px; font-weight: 600; margin-bottom: 4px; line-height: 1.3; }
-    .item-card-meta { font-size: 11px; color: var(--text-muted); display: flex; justify-content: space-between; }
-    .badge { display: inline-block; padding: 2px 7px; border-radius: 12px; font-size: 10px; font-weight: 700; text-transform: uppercase; }
+    .item-card.has-warning { border-left: 4px solid var(--danger); background: #fffafa; }
+    .item-card.has-warning.active { border-left: 4px solid var(--danger); background: #fee2e2; }
+
+    .item-card-thumb {
+      width: 48px; height: 48px; border-radius: 6px; object-fit: cover;
+      background: #e2e8f0; flex-shrink: 0; display: flex; align-items: center; justify-content: center;
+      font-size: 18px; color: var(--text-muted); border: 1px solid var(--border);
+    }
+    .item-card-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+    .item-card-title {
+      font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden;
+      text-overflow: ellipsis; color: var(--text);
+    }
+    .item-card-meta { font-size: 11px; color: var(--text-muted); display: flex; justify-content: space-between; align-items: center; }
+    .item-card-price { font-weight: 700; color: var(--primary); }
+    .item-card-price.zero-data { color: var(--danger); font-weight: 800; }
+    
+    .badge { display: inline-block; padding: 2px 7px; border-radius: 10px; font-size: 10px; font-weight: 700; text-transform: uppercase; }
     .badge-freigegeben { background: #d4edda; color: #155724; }
     .badge-entwurf { background: #fff3cd; color: #856404; }
+    .badge-zurückgehalten { background: #e2e8f0; color: #475569; }
     .badge-veröffentlicht { background: #cce5ff; color: #004085; }
+    .badge-danger { background: var(--danger-light); color: var(--danger); border: 1px solid rgba(220,53,69,0.3); }
 
+    /* Content Area */
     .content-area { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
     .toolbar { padding: 10px 24px; background: var(--card); border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+    
     .btn { padding: 8px 16px; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; border: none; transition: background 0.15s; display: inline-flex; align-items: center; gap: 6px; }
     .btn-primary { background: var(--primary); color: #fff; }
     .btn-primary:hover { background: var(--primary-hover); }
@@ -561,32 +637,106 @@ HTML_DASHBOARD = """<!DOCTYPE html>
     .btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text); }
     .btn-outline:hover { background: #edf2f7; }
 
-    .workspace { flex: 1; display: flex; overflow: hidden; padding: 16px 24px; gap: 20px; }
-    .panel { flex: 1; background: var(--card); border: 1px solid var(--border); border-radius: 8px; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
-    .panel-header { padding: 12px 18px; font-size: 14px; font-weight: bold; background: #f8fafc; border-bottom: 1px solid var(--border); color: var(--primary); display: flex; justify-content: space-between; align-items: center; }
-    .panel-body { flex: 1; overflow-y: auto; padding: 18px; }
+    /* Studio Split Workspace */
+    .workspace { flex: 1; display: flex; overflow: hidden; padding: 16px 20px; gap: 18px; }
+    .panel { flex: 1.1; background: var(--card); border: 1px solid var(--border); border-radius: 8px; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
+    .panel-right { flex: 0.9; }
+    .panel-header { padding: 10px 16px; font-size: 13px; font-weight: bold; background: #f8fafc; border-bottom: 1px solid var(--border); color: var(--primary); display: flex; justify-content: space-between; align-items: center; }
+    .panel-body { flex: 1; overflow-y: auto; padding: 16px; }
 
-    .field-group { margin-bottom: 14px; }
-    .field-label { font-size: 12px; font-weight: 700; color: var(--text-muted); margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
-    .field-value { font-size: 14px; line-height: 1.5; color: var(--text); }
-    .price-box { background: #eef6fc; border-left: 4px solid var(--accent); padding: 12px; border-radius: 4px; margin-bottom: 16px; }
-    .price-highlight { font-size: 20px; font-weight: bold; color: var(--primary); }
+    /* Left Pane Components: AI Valuation Card & Editable Forms */
+    .valuation-box {
+      background: #eef6fc; border-left: 4px solid var(--accent); padding: 14px 16px; border-radius: 6px; margin-bottom: 16px;
+    }
+    .valuation-box.zero-data-alert {
+      background: #fdf2f2; border-left: 4px solid var(--danger); border: 1px solid #fca5a5;
+    }
+    .valuation-header { display: flex; justify-content: space-between; align-items: center; }
+    .valuation-label { font-size: 11px; font-weight: 800; color: var(--accent); text-transform: uppercase; letter-spacing: 0.5px; }
+    .valuation-box.zero-data-alert .valuation-label { color: var(--danger); }
+    
+    .valuation-price-hero { font-size: 26px; font-weight: 800; color: var(--primary); margin: 4px 0; }
+    .valuation-box.zero-data-alert .valuation-price-hero { color: var(--danger); }
 
-    .gallery-container { display: flex; flex-direction: column; height: 100%; }
-    .main-image-wrap { flex: 1; background: #000; border-radius: 6px; display: flex; align-items: center; justify-content: center; margin-bottom: 12px; overflow: hidden; min-height: 250px; }
+    .zero-data-banner {
+      background: var(--danger); color: #fff; font-size: 11px; font-weight: 700;
+      padding: 4px 8px; border-radius: 4px; margin-top: 6px; display: flex; align-items: center; gap: 6px;
+    }
+    .valuation-stats { font-size: 12px; color: var(--text-muted); margin-top: 6px; }
+
+    .field-group { margin-bottom: 12px; }
+    .field-label { font-size: 11px; font-weight: 700; color: var(--text-muted); margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
+    .field-input, .field-textarea, .field-select {
+      width: 100%; padding: 7px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; color: var(--text); background: #fff;
+    }
+    .field-textarea { min-height: 80px; resize: vertical; line-height: 1.45; }
+    
+    .field-input:focus, .field-textarea:focus, .field-select:focus {
+      outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(46,117,182,0.15);
+    }
+    
+    .field-input.input-warning {
+      border-color: var(--danger) !important;
+      box-shadow: 0 0 0 3px rgba(220,53,69,0.15) !important;
+      background: #fffafa;
+    }
+
+    .form-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .form-grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+
+    /* Title Char Count Warning */
+    .title-row-info { display: flex; justify-content: space-between; align-items: center; margin-top: 3px; font-size: 11px; }
+    .char-counter { color: var(--text-muted); font-weight: 600; }
+    .char-counter.warning { color: var(--danger); font-weight: 800; }
+    .title-warning-msg { color: var(--danger); font-weight: 700; display: none; }
+
+    /* Right Pane: Gallery & Video Tabs */
+    .media-subtabs { display: flex; gap: 6px; background: #e2e8f0; padding: 3px; border-radius: 6px; }
+    .media-subtab-btn {
+      padding: 4px 12px; border-radius: 4px; font-size: 11px; font-weight: 700; border: none;
+      background: transparent; color: var(--text-muted); cursor: pointer; transition: all 0.2s;
+    }
+    .media-subtab-btn.active { background: #fff; color: var(--primary); box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+
+    .gallery-view, .video-view { display: none; flex-direction: column; height: 100%; }
+    .gallery-view.active, .video-view.active { display: flex; }
+
+    .main-image-wrap {
+      flex: 1; background: #0f172a; border-radius: 6px; display: flex; align-items: center;
+      justify-content: center; margin-bottom: 10px; overflow: hidden; min-height: 280px; position: relative;
+    }
     .main-image { max-width: 100%; max-height: 100%; object-fit: contain; }
-    .thumbnail-row { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 6px; }
-    .thumbnail { width: 64px; height: 64px; border-radius: 4px; object-fit: cover; cursor: pointer; border: 2px solid transparent; }
-    .thumbnail.active { border-color: var(--accent); }
 
-    .edit-section { background: #fafbfc; border-top: 1px solid var(--border); padding: 16px 24px; display: grid; grid-template-columns: 2fr 1fr 1fr 1fr 1.2fr auto; gap: 14px; align-items: end; }
-    .form-group { display: flex; flex-direction: column; gap: 4px; }
-    .form-label { font-size: 11px; font-weight: bold; color: var(--text-muted); }
-    .form-input, .form-select { padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; background: #fff; }
-    .char-count { font-size: 11px; color: var(--text-muted); text-align: right; }
-    .char-count.warning { color: var(--danger); font-weight: bold; }
+    .thumbnail-row {
+      display: flex; gap: 8px; overflow-x: auto; padding: 4px 2px; scrollbar-width: thin;
+    }
+    .thumbnail {
+      width: 64px; height: 64px; border-radius: 4px; object-fit: cover; cursor: pointer;
+      border: 2px solid transparent; flex-shrink: 0; background: #e2e8f0; transition: border-color 0.15s;
+    }
+    .thumbnail:hover { border-color: #93c5fd; }
+    .thumbnail.active { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(46,117,182,0.3); }
 
-    #toast { position: fixed; bottom: 20px; right: 20px; padding: 12px 20px; border-radius: 6px; background: #333; color: #fff; font-size: 13px; display: none; z-index: 1000; box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
+    .video-container {
+      flex: 1; background: #0f172a; border-radius: 6px; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; overflow: hidden; min-height: 280px; padding: 10px;
+    }
+    .video-player { width: 100%; height: 100%; max-height: 440px; border-radius: 4px; background: #000; outline: none; }
+    .video-empty-state { color: #94a3b8; font-size: 13px; text-align: center; }
+
+    /* Bottom Action Bar */
+    .edit-section {
+      background: #fafbfc; border-top: 1px solid var(--border); padding: 12px 24px;
+      display: grid; grid-template-columns: 1.2fr 1fr 1fr 1.2fr auto; gap: 12px; align-items: end;
+    }
+    .edit-group { display: flex; flex-direction: column; gap: 3px; }
+    .edit-label { font-size: 11px; font-weight: bold; color: var(--text-muted); text-transform: uppercase; }
+
+    #toast {
+      position: fixed; bottom: 20px; right: 20px; padding: 12px 20px; border-radius: 6px;
+      background: #1e293b; color: #fff; font-size: 13px; display: none; z-index: 1000;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.2); border-left: 4px solid var(--accent);
+    }
   </style>
 </head>
 <body>
@@ -661,7 +811,7 @@ HTML_DASHBOARD = """<!DOCTYPE html>
             <button class="btn btn-outline" style="padding: 4px 10px; font-size: 11px;" onclick="loadStagedMedia()">🔄 Aktualisieren</button>
           </div>
           <ul class="staged-list" id="staged-files-ul">
-            <li style="padding: 20px; text-align: center; color: var(--text-muted); font-size: 13px;">Keine ungesichteten Rohdateien in input/raw vorhanden.</li>
+            <li style="padding: 20px; text-align: center; color: var(--text-muted); font-size: 13px;">Keine ungesichteten Rohdateien in input/raw/ vorhanden.</li>
           </ul>
         </div>
 
@@ -713,10 +863,20 @@ HTML_DASHBOARD = """<!DOCTYPE html>
   <!-- ========================================================= -->
   <div class="main-view" id="tab-review">
     <div class="main-container">
-      <!-- Sidebar -->
+      
+      <!-- Left Sidebar -->
       <div class="sidebar">
         <div class="sidebar-header">
-          Gefundene Artikel (<span id="item-count">0</span>)
+          <div class="sidebar-search-box">
+            <span class="sidebar-search-icon">🔍</span>
+            <input type="text" id="sidebar-search-input" class="sidebar-search-input" placeholder="Suchen nach Titel, ID, Marke..." oninput="applySidebarFilters()">
+          </div>
+          <div class="filter-pills">
+            <button class="filter-pill active" id="pill-all" onclick="setFilterStatus('all')">Alle (<span id="count-all">0</span>)</button>
+            <button class="filter-pill" id="pill-draft" onclick="setFilterStatus('draft')">Entwürfe (<span id="count-draft">0</span>)</button>
+            <button class="filter-pill" id="pill-approved" onclick="setFilterStatus('approved')">Freigegeben (<span id="count-approved">0</span>)</button>
+            <button class="filter-pill" id="pill-held" onclick="setFilterStatus('held')">Zurückgehalten (<span id="count-held">0</span>)</button>
+          </div>
         </div>
         <ul class="item-list" id="items-ul"></ul>
       </div>
@@ -725,59 +885,178 @@ HTML_DASHBOARD = """<!DOCTYPE html>
       <div class="content-area">
         <div class="toolbar">
           <div>
-            <span style="font-weight: 600; font-size: 14px;" id="selected-item-title">Kein Artikel ausgewählt</span>
+            <span style="font-weight: 700; font-size: 15px; color: var(--primary);" id="selected-item-title">Kein Artikel ausgewählt</span>
           </div>
           <div style="display: flex; gap: 10px;">
             <button class="btn btn-outline" onclick="loadItems()">🔄 Neu laden</button>
             <button class="btn btn-primary" onclick="exportEbayCsv()">📦 eBay CSV erstellen</button>
-            <button class="btn btn-success" onclick="saveCurrentItem(true)">💾 Speichern & Nächster</button>
+            <button class="btn btn-success" onclick="saveCurrentItem(true)">💾 Speichern & Nächster ➔</button>
           </div>
         </div>
 
         <div class="workspace">
-          <!-- Left Panel: Data & Research -->
+          
+          <!-- Left Panel: Metadata & Valuation Editor -->
           <div class="panel">
             <div class="panel-header">
-              <span>📊 Recherche & Bewertungsdaten</span>
+              <span>📊 Recherche & Bewertungsstudio</span>
               <span id="item-id-badge" class="badge badge-entwurf">ID: -</span>
             </div>
             <div class="panel-body" id="details-body">
-              <div style="color: var(--text-muted); text-align: center; margin-top: 40px;">Wähle einen Artikel aus der linken Liste.</div>
+              
+              <!-- Valuation Hero Card -->
+              <div class="valuation-box" id="valuation-box">
+                <div class="valuation-header">
+                  <span class="valuation-label" id="valuation-badge-text">EMPFOHLENE RETRO-BEWERTUNG (KI)</span>
+                </div>
+                <div class="valuation-price-hero" id="valuation-price-display">0,00 €</div>
+                <div id="valuation-zero-data-banner" class="zero-data-banner" style="display: none;">
+                  ⚠️ ZERO-DATA: Keine Marktdaten ermittelt (0,00 €) - Bitte Preis manuell festlegen!
+                </div>
+                <div class="valuation-stats" id="valuation-stats-display">
+                  Spanne: 0,00 € - 0,00 € | Web-Median: 0,00 € (0 Quellen)
+                </div>
+              </div>
+
+              <!-- Editable Form Fields -->
+              <div class="field-group">
+                <div class="field-label">eBay Titel (Maximal 80 Zeichen)</div>
+                <input type="text" id="input-title" class="field-input" oninput="handleTitleChange()">
+                <div class="title-row-info">
+                  <span class="title-warning-msg" id="title-warning-msg">⚠️ Titel überschreitet 80 Zeichen für eBay!</span>
+                  <span class="char-counter" id="char-counter">0 / 80 Zeichen</span>
+                </div>
+              </div>
+
+              <div class="field-group">
+                <div class="field-label">Produktbeschreibung</div>
+                <textarea id="input-description" class="field-textarea"></textarea>
+              </div>
+
+              <div class="form-grid-2">
+                <div class="field-group">
+                  <div class="field-label">Hersteller / Marke</div>
+                  <input type="text" id="input-manufacturer" class="field-input">
+                </div>
+                <div class="field-group">
+                  <div class="field-label">Modell / Epoche / Jahr</div>
+                  <input type="text" id="input-epoch" class="field-input">
+                </div>
+              </div>
+
+              <div class="form-grid-2">
+                <div class="field-group">
+                  <div class="field-label">Material</div>
+                  <input type="text" id="input-material" class="field-input">
+                </div>
+                <div class="field-group">
+                  <div class="field-label">Farbe</div>
+                  <input type="text" id="input-color" class="field-input">
+                </div>
+              </div>
+
+              <div class="form-grid-3">
+                <div class="field-group">
+                  <div class="field-label">Länge (cm)</div>
+                  <input type="text" id="input-length" class="field-input">
+                </div>
+                <div class="field-group">
+                  <div class="field-label">Breite (cm)</div>
+                  <input type="text" id="input-width" class="field-input">
+                </div>
+                <div class="field-group">
+                  <div class="field-label">Höhe (cm)</div>
+                  <input type="text" id="input-height" class="field-input">
+                </div>
+              </div>
+
+              <div class="form-grid-2">
+                <div class="field-group">
+                  <div class="field-label">Gewicht (kg)</div>
+                  <input type="text" id="input-weight" class="field-input">
+                </div>
+                <div class="field-group">
+                  <div class="field-label">Logistik-Kategorie</div>
+                  <select id="input-logistics" class="field-select">
+                    <option value="Paket">Paket (Standard)</option>
+                    <option value="Sperrgut">Sperrgut</option>
+                    <option value="Spedition">Spedition / Palette</option>
+                    <option value="Selbstabholung">Nur Selbstabholung</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="form-grid-2">
+                <div class="field-group">
+                  <div class="field-label">Zustand</div>
+                  <input type="text" id="input-condition" class="field-input">
+                </div>
+                <div class="field-group">
+                  <div class="field-label">Mängel & Schäden</div>
+                  <input type="text" id="input-defects" class="field-input">
+                </div>
+              </div>
+
+              <div class="field-group">
+                <div class="field-label">Fehlende Teile</div>
+                <input type="text" id="input-missing-parts" class="field-input">
+              </div>
+
+              <div class="field-group">
+                <div class="field-label">Preisfindungs-Begründung</div>
+                <div id="valuation-rationale" class="field-textarea" style="background: #f8fafc; font-size: 12px; color: var(--text-muted); border: 1px dashed var(--border); overflow-y: auto;">-</div>
+              </div>
+
             </div>
           </div>
 
-          <!-- Right Panel: Images -->
-          <div class="panel">
+          <!-- Right Panel: High-Res Photo Gallery & Video Player -->
+          <div class="panel panel-right">
             <div class="panel-header">
-              <span>📷 Original-Bildmaterial (<span id="photo-count">0</span>)</span>
+              <div class="media-subtabs">
+                <button class="media-subtab-btn active" id="subtab-photos" onclick="switchMediaTab('photos')">
+                  📷 Fotos (<span id="photo-count">0</span>)
+                </button>
+                <button class="media-subtab-btn" id="subtab-videos" onclick="switchMediaTab('videos')">
+                  🎥 Video (<span id="video-count">0</span>)
+                </button>
+              </div>
+              <span style="font-size: 11px; color: var(--text-muted);" id="media-zoom-hint">Originalaufnahmen</span>
             </div>
+
             <div class="panel-body" style="padding: 12px;">
-              <div class="gallery-container">
+              <!-- Photo Gallery Subtab -->
+              <div class="gallery-view active" id="media-gallery-view">
                 <div class="main-image-wrap">
                   <img id="main-photo" class="main-image" src="" alt="Kein Bild vorhanden">
                 </div>
                 <div class="thumbnail-row" id="thumbnail-row"></div>
               </div>
+
+              <!-- Video Player Subtab -->
+              <div class="video-view" id="media-video-view">
+                <div class="video-container">
+                  <video id="main-video-player" class="video-player" controls preload="metadata" style="display: none;"></video>
+                  <div id="video-empty-state" class="video-empty-state">
+                    🎥 Kein Video für diesen Artikel vorhanden.
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
+
         </div>
 
         <!-- Bottom: Edit Bar -->
         <div class="edit-section" id="edit-bar">
-          <div class="form-group">
-            <label class="form-label">eBay Titel (Max 80 Zeichen)</label>
-            <input type="text" id="input-title" class="form-input" oninput="updateCharCount()">
-            <div class="char-count" id="char-count">0 / 80</div>
+          <div class="edit-group">
+            <label class="edit-label">Verkaufspreis (€)</label>
+            <input type="number" step="0.50" id="input-price" class="field-input" style="font-weight: 700; font-size: 14px;" oninput="handlePriceChange()">
           </div>
 
-          <div class="form-group">
-            <label class="form-label">Verkaufspreis (€)</label>
-            <input type="number" step="0.50" id="input-price" class="form-input">
-          </div>
-
-          <div class="form-group">
-            <label class="form-label">Plattform</label>
-            <select id="input-platform" class="form-select">
+          <div class="edit-group">
+            <label class="edit-label">Plattform</label>
+            <select id="input-platform" class="field-select">
               <option value="eBay">eBay</option>
               <option value="Etsy">Etsy</option>
               <option value="Kleinanzeigen">Kleinanzeigen</option>
@@ -785,17 +1064,17 @@ HTML_DASHBOARD = """<!DOCTYPE html>
             </select>
           </div>
 
-          <div class="form-group">
-            <label class="form-label">Format</label>
-            <select id="input-format" class="form-select">
+          <div class="edit-group">
+            <label class="edit-label">Format</label>
+            <select id="input-format" class="field-select">
               <option value="FixedPrice">Sofort-Kaufen (Festpreis)</option>
               <option value="Auction">Auktion (7 Tage)</option>
             </select>
           </div>
 
-          <div class="form-group">
-            <label class="form-label">Freigabe-Status</label>
-            <select id="input-status" class="form-select">
+          <div class="edit-group">
+            <label class="edit-label">Freigabe-Status</label>
+            <select id="input-status" class="field-select">
               <option value="Freigegeben">✅ Freigegeben</option>
               <option value="Entwurf">📝 Entwurf</option>
               <option value="Zurückgehalten">⏸️ Zurückgehalten</option>
@@ -830,8 +1109,10 @@ HTML_DASHBOARD = """<!DOCTYPE html>
 
   <script>
     let currentItems = [];
+    let filteredIndices = [];
     let selectedIndex = 0;
     let pollInterval = null;
+    let currentFilterStatus = "all";
 
     // --- Tab Navigation ---
     function switchTab(tabId) {
@@ -849,6 +1130,28 @@ HTML_DASHBOARD = """<!DOCTYPE html>
         loadItems();
       } else if (tabId === "tab-export") {
         document.getElementById("btn-tab-export").classList.add("active");
+      }
+    }
+
+    // --- Subtab Navigation in Right Media Panel ---
+    function switchMediaTab(tab) {
+      const btnPhotos = document.getElementById("subtab-photos");
+      const btnVideos = document.getElementById("subtab-videos");
+      const viewGallery = document.getElementById("media-gallery-view");
+      const viewVideo = document.getElementById("media-video-view");
+
+      if (tab === "photos") {
+        btnPhotos.classList.add("active");
+        btnVideos.classList.remove("active");
+        viewGallery.classList.add("active");
+        viewVideo.classList.remove("active");
+        const vid = document.getElementById("main-video-player");
+        if (vid) vid.pause();
+      } else {
+        btnVideos.classList.add("active");
+        btnPhotos.classList.remove("active");
+        viewVideo.classList.add("active");
+        viewGallery.classList.remove("active");
       }
     }
 
@@ -988,7 +1291,7 @@ HTML_DASHBOARD = """<!DOCTYPE html>
         stepText.innerText = data.current_step || "Warte...";
 
         if (data.logs && data.logs.length > 0) {
-          terminal.innerText = data.logs.join("\\n");
+          terminal.innerText = data.logs.join("\n");
           terminal.scrollTop = terminal.scrollHeight;
         }
 
@@ -1005,7 +1308,6 @@ HTML_DASHBOARD = """<!DOCTYPE html>
           pollInterval = null;
           showToast("🎉 Pipeline erfolgreich abgeschlossen! Wechsle zu Tab 2...");
           
-          // Automatische Umschaltung auf Tab 2
           setTimeout(() => {
             switchTab("tab-review");
           }, 1200);
@@ -1028,7 +1330,7 @@ HTML_DASHBOARD = """<!DOCTYPE html>
       }
     }
 
-    // --- Tab 2: Review Hub Logic ---
+    // --- Tab 2: Review Hub Logic & Guardrails ---
     async function loadItems() {
       showToast("Lade Artikeldaten...");
       try {
@@ -1036,34 +1338,125 @@ HTML_DASHBOARD = """<!DOCTYPE html>
         const data = await res.json();
         currentItems = data.items || [];
         document.getElementById("status-info").innerText = `Datei: ${data.file_name || 'N/A'} (${currentItems.length} Artikel)`;
-        document.getElementById("item-count").innerText = currentItems.length;
         document.getElementById("badge-items-count").innerText = currentItems.length;
 
-        renderSidebar();
-        if (currentItems.length > 0) {
-          selectItem(0);
+        applySidebarFilters();
+        if (filteredIndices.length > 0) {
+          selectItem(filteredIndices[0]);
         }
       } catch (err) {
         showToast("Fehler beim Laden: " + err.message);
       }
     }
 
+    function setFilterStatus(status) {
+      currentFilterStatus = status;
+      document.querySelectorAll(".filter-pill").forEach(p => p.classList.remove("active"));
+      const targetPill = document.getElementById(`pill-${status}`);
+      if (targetPill) targetPill.classList.add("active");
+      applySidebarFilters();
+    }
+
+    function applySidebarFilters() {
+      const query = (document.getElementById("sidebar-search-input").value || "").toLowerCase().trim();
+      
+      let allCount = currentItems.length;
+      let draftCount = 0;
+      let approvedCount = 0;
+      let heldCount = 0;
+
+      currentItems.forEach(it => {
+        const st = (it.Status || "Entwurf").toLowerCase();
+        if (st.includes("freigeb")) approvedCount++;
+        else if (st.includes("zurück") || st.includes("halt")) heldCount++;
+        else draftCount++;
+      });
+
+      document.getElementById("count-all").innerText = allCount;
+      document.getElementById("count-draft").innerText = draftCount;
+      document.getElementById("count-approved").innerText = approvedCount;
+      document.getElementById("count-held").innerText = heldCount;
+
+      filteredIndices = [];
+      currentItems.forEach((it, idx) => {
+        const status = (it.Status || "Entwurf").toLowerCase();
+        
+        let matchFilter = true;
+        if (currentFilterStatus === "draft" && !status.includes("entwurf")) matchFilter = false;
+        if (currentFilterStatus === "approved" && !status.includes("freigeb")) matchFilter = false;
+        if (currentFilterStatus === "held" && (!status.includes("zurück") && !status.includes("halt"))) matchFilter = false;
+
+        if (!matchFilter) return;
+
+        if (query) {
+          const searchable = [
+            it.id,
+            it.titel,
+            it.Produkt_Titel,
+            it.hersteller_oder_marke,
+            it.modell_oder_epoche,
+            it.material,
+            it.produktbeschreibung
+          ].map(x => String(x || "").toLowerCase()).join(" ");
+          
+          if (!searchable.includes(query)) return;
+        }
+
+        filteredIndices.push(idx);
+      });
+
+      renderSidebar();
+    }
+
     function renderSidebar() {
       const ul = document.getElementById("items-ul");
       ul.innerHTML = "";
-      currentItems.forEach((it, idx) => {
+
+      if (filteredIndices.length === 0) {
+        ul.innerHTML = `<li style="padding: 24px 16px; text-align: center; color: var(--text-muted); font-size: 12px;">Keine passenden Artikel gefunden.</li>`;
+        return;
+      }
+
+      filteredIndices.forEach(idx => {
+        const it = currentItems[idx];
         const li = document.createElement("li");
-        li.className = `item-card ${idx === selectedIndex ? 'active' : ''}`;
+        
+        const price = parseFloat(it.ErzielterPreis || it.Empfohlener_Retail_Preis_EUR || it.Preis_EUR || 0);
+        const title = it.titel || it.Produkt_Titel || `Artikel ${it.id || idx+1}`;
+        const isZeroData = (price <= 0);
+        const isTitleOverflow = (title.length > 80);
+        const hasWarning = isZeroData || isTitleOverflow;
+
+        li.className = `item-card ${idx === selectedIndex ? 'active' : ''} ${hasWarning ? 'has-warning' : ''}`;
         li.onclick = () => selectItem(idx);
 
         const status = (it.Status || "Entwurf").toLowerCase();
-        const badgeClass = status.includes("freigeb") ? "badge-freigegeben" : (status.includes("veröff") ? "badge-veröffentlicht" : "badge-entwurf");
+        let badgeClass = "badge-entwurf";
+        if (status.includes("freigeb")) badgeClass = "badge-freigegeben";
+        else if (status.includes("veröff")) badgeClass = "badge-veröffentlicht";
+        else if (status.includes("zurück") || status.includes("halt")) badgeClass = "badge-zurückgehalten";
+
+        let warningBadges = "";
+        if (isZeroData) {
+          warningBadges += `<span class="badge badge-danger">⚠️ 0,00 €</span> `;
+        }
+        if (isTitleOverflow) {
+          warningBadges += `<span class="badge badge-danger">⚠️ >80 Zchn</span>`;
+        }
+
+        const thumbHtml = it.thumbnail_url
+          ? `<img class="item-card-thumb" src="${it.thumbnail_url}" alt="" onerror="this.outerHTML='<div class=\\'item-card-thumb\\'>📦</div>'">`
+          : `<div class="item-card-thumb">📦</div>`;
 
         li.innerHTML = `
-          <div class="item-card-title">${it.titel || it.Produkt_Titel || 'Artikel ' + (it.id || idx+1)}</div>
-          <div class="item-card-meta">
-            <span>ID: ${it.id || 'N/A'} | € ${(it.ErzielterPreis || it.Empfohlener_Retail_Preis_EUR || it.Preis_EUR || 0)}</span>
-            <span class="badge ${badgeClass}">${it.Status || 'Entwurf'}</span>
+          ${thumbHtml}
+          <div class="item-card-info">
+            <div class="item-card-title" title="${title}">${title}</div>
+            <div class="item-card-meta">
+              <span class="item-card-price ${isZeroData ? 'zero-data' : ''}">ID: ${it.id || 'N/A'} | € ${price.toFixed(2)}</span>
+              <span class="badge ${badgeClass}">${it.Status || 'Entwurf'}</span>
+            </div>
+            ${warningBadges ? `<div style="margin-top: 2px;">${warningBadges}</div>` : ''}
           </div>
         `;
         ul.appendChild(li);
@@ -1076,98 +1469,145 @@ HTML_DASHBOARD = """<!DOCTYPE html>
       const it = currentItems[idx];
       if (!it) return;
 
-      document.getElementById("selected-item-title").innerText = it.titel || "Artikel " + it.id;
+      const price = parseFloat(it.ErzielterPreis || it.Empfohlener_Retail_Preis_EUR || it.Preis_EUR || 0);
+      const isZeroData = (price <= 0);
+
+      document.getElementById("selected-item-title").innerText = it.titel || it.Produkt_Titel || "Artikel " + it.id;
       document.getElementById("item-id-badge").innerText = "ID: " + (it.id || "N/A");
 
-      const details = document.getElementById("details-body");
-      details.innerHTML = `
-        <div class="price-box">
-          <div style="font-size: 12px; color: var(--accent); font-weight: bold; margin-bottom: 2px;">EMPFOHLENE RETRO-BEWERTUNG (LLM)</div>
-          <div class="price-highlight">€ ${(it.Empfohlener_Retail_Preis_EUR || it.Preis_EUR || 0).toFixed(2)}</div>
-          <div style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">
-            Spanne: € ${(it.Preisspanne_Min_EUR || 0).toFixed(2)} - € ${(it.Preisspanne_Max_EUR || 0).toFixed(2)} | Web-Median: € ${(it.Median_Web_Preis_EUR || 0).toFixed(2)} (${it.Anzahl_gefundene_Webpreise || 0} Quellen)
-          </div>
-        </div>
+      // AI Valuation Card
+      const valBox = document.getElementById("valuation-box");
+      const valPriceDisplay = document.getElementById("valuation-price-display");
+      const valZeroBanner = document.getElementById("valuation-zero-data-banner");
+      const valStats = document.getElementById("valuation-stats-display");
+      const valBadge = document.getElementById("valuation-badge-text");
 
-        <div class="field-group">
-          <div class="field-label">Produktbeschreibung</div>
-          <div class="field-value">${(it.produktbeschreibung || 'Keine Beschreibung vorhanden.').replace(/\\n/g, '<br>')}</div>
-        </div>
+      valPriceDisplay.innerText = `${price.toFixed(2)} €`;
+      valStats.innerText = `Spanne: ${(it.Preisspanne_Min_EUR || 0).toFixed(2)} € - ${(it.Preisspanne_Max_EUR || 0).toFixed(2)} € | Web-Median: ${(it.Median_Web_Preis_EUR || 0).toFixed(2)} € (${it.Anzahl_gefundene_Webpreise || 0} Quellen)`;
+      document.getElementById("valuation-rationale").innerText = it.Begruendung_Preisfindung || "Keine Begründung angegeben.";
 
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px;">
-          <div class="field-group">
-            <div class="field-label">Hersteller / Epoche</div>
-            <div class="field-value">${it.hersteller_oder_marke || 'Unbekannt'} / ${it.modell_oder_epoche || it.geschaetztes_jahr_oder_epoche || 'Vintage'}</div>
-          </div>
-          <div class="field-group">
-            <div class="field-label">Material & Farbe</div>
-            <div class="field-value">${it.material || 'Unbekannt'} (${it.farbe || '-'})</div>
-          </div>
-        </div>
+      if (isZeroData) {
+        valBox.className = "valuation-box zero-data-alert";
+        valZeroBanner.style.display = "flex";
+        valBadge.innerText = "⚠️ ACHTUNG: ZERO-DATA / MANUELLE BEWERTUNG ERFORDERLICH";
+      } else {
+        valBox.className = "valuation-box";
+        valZeroBanner.style.display = "none";
+        valBadge.innerText = "EMPFOHLENE RETRO-BEWERTUNG (KI)";
+      }
 
-        <div class="field-group">
-          <div class="field-label">Abmessungen & Logistik</div>
-          <div class="field-value">L: ${it.laenge_cm || '-'} cm, B: ${it.breite_cm || '-'} cm, H: ${it.hoehe_cm || '-'} cm, Gewicht: ${it.gewicht_kg || '-'} kg | <strong>${it.logistik_kategorie || 'Paket'}</strong></div>
-        </div>
-
-        <div class="field-group">
-          <div class="field-label">Zustand & Mängel</div>
-          <div class="field-value"><strong>${it.zustand || 'Gebraucht'}</strong>: ${it.maengel || 'Keine besonderen Mängel'}${it.fehlende_teile ? ' | Fehlend: ' + it.fehlende_teile : ''}</div>
-        </div>
-
-        <div class="field-group">
-          <div class="field-label">Preisfindungs-Begründung</div>
-          <div class="field-value" style="font-size: 13px; color: var(--text-muted);">${it.Begruendung_Preisfindung || '-'}</div>
-        </div>
-      `;
-
+      // Populate Editable Form Fields
       document.getElementById("input-title").value = it.titel || it.Produkt_Titel || "";
-      document.getElementById("input-price").value = it.ErzielterPreis || it.Empfohlener_Retail_Preis_EUR || it.Preis_EUR || "";
+      document.getElementById("input-description").value = it.produktbeschreibung || "";
+      document.getElementById("input-manufacturer").value = it.hersteller_oder_marke || "";
+      document.getElementById("input-epoch").value = it.modell_oder_epoche || it.geschaetztes_jahr_oder_epoche || "";
+      document.getElementById("input-material").value = it.material || "";
+      document.getElementById("input-color").value = it.farbe || "";
+      document.getElementById("input-length").value = it.laenge_cm || "";
+      document.getElementById("input-width").value = it.breite_cm || "";
+      document.getElementById("input-height").value = it.hoehe_cm || "";
+      document.getElementById("input-weight").value = it.gewicht_kg || "";
+      document.getElementById("input-logistics").value = it.logistik_kategorie || "Paket";
+      document.getElementById("input-condition").value = it.zustand || "Gebraucht";
+      document.getElementById("input-defects").value = it.maengel || "";
+      document.getElementById("input-missing-parts").value = it.fehlende_teile || "";
+
+      // Bottom Bar
+      document.getElementById("input-price").value = price;
       document.getElementById("input-platform").value = it.VerkaufsOrt || "eBay";
       document.getElementById("input-format").value = it.AngebotsFormat || "FixedPrice";
       document.getElementById("input-status").value = it.Status || "Freigegeben";
-      updateCharCount();
 
-      loadImagesForSelected(it);
+      handleTitleChange();
+      handlePriceChange();
+
+      loadMediaForSelected(it);
     }
 
-    function updateCharCount() {
-      const title = document.getElementById("input-title").value;
-      const countEl = document.getElementById("char-count");
+    function handleTitleChange() {
+      const title = document.getElementById("input-title").value || "";
+      const countEl = document.getElementById("char-counter");
+      const warnMsg = document.getElementById("title-warning-msg");
+      const inputEl = document.getElementById("input-title");
+
       countEl.innerText = `${title.length} / 80 Zeichen`;
       if (title.length > 80) {
-        countEl.className = "char-count warning";
+        countEl.className = "char-counter warning";
+        inputEl.classList.add("input-warning");
+        warnMsg.style.display = "inline";
       } else {
-        countEl.className = "char-count";
+        countEl.className = "char-counter";
+        inputEl.classList.remove("input-warning");
+        warnMsg.style.display = "none";
       }
     }
 
-    async function loadImagesForSelected(item) {
+    function handlePriceChange() {
+      const price = parseFloat(document.getElementById("input-price").value) || 0;
+      const priceInput = document.getElementById("input-price");
+      if (price <= 0) {
+        priceInput.classList.add("input-warning");
+      } else {
+        priceInput.classList.remove("input-warning");
+      }
+    }
+
+    async function loadMediaForSelected(item) {
       const thumbRow = document.getElementById("thumbnail-row");
       const mainImg = document.getElementById("main-photo");
+      const vidPlayer = document.getElementById("main-video-player");
+      const vidEmpty = document.getElementById("video-empty-state");
+
       thumbRow.innerHTML = "";
       document.getElementById("photo-count").innerText = "0";
+      document.getElementById("video-count").innerText = "0";
 
-      const res = await fetch(`/api/images_for_item?id=${encodeURIComponent(item.id || '')}&name=${encodeURIComponent(item.ordner_name || item.titel || '')}`);
-      const data = await res.json();
-      const images = data.images || [];
+      // 1. Load Images
+      try {
+        const res = await fetch(`/api/images_for_item?id=${encodeURIComponent(item.id || '')}&name=${encodeURIComponent(item.ordner_name || item.titel || '')}`);
+        const data = await res.json();
+        const images = data.images || [];
 
-      document.getElementById("photo-count").innerText = images.length;
-      if (images.length > 0) {
-        mainImg.src = images[0].url;
-        images.forEach((img, idx) => {
-          const t = document.createElement("img");
-          t.src = img.url;
-          t.className = `thumbnail ${idx === 0 ? 'active' : ''}`;
-          t.onclick = () => {
-            mainImg.src = img.url;
-            document.querySelectorAll(".thumbnail").forEach(el => el.classList.remove("active"));
-            t.classList.add("active");
-          };
-          thumbRow.appendChild(t);
-        });
-      } else {
-        mainImg.src = "";
+        document.getElementById("photo-count").innerText = images.length;
+        if (images.length > 0) {
+          mainImg.src = images[0].url;
+          images.forEach((img, idx) => {
+            const t = document.createElement("img");
+            t.src = img.url;
+            t.className = `thumbnail ${idx === 0 ? 'active' : ''}`;
+            t.onclick = () => {
+              mainImg.src = img.url;
+              document.querySelectorAll(".thumbnail").forEach(el => el.classList.remove("active"));
+              t.classList.add("active");
+            };
+            thumbRow.appendChild(t);
+          });
+        } else {
+          mainImg.src = "";
+        }
+      } catch (err) {
+        console.error("Fehler beim Laden der Bilder:", err);
+      }
+
+      // 2. Load Videos
+      try {
+        const resVid = await fetch(`/api/videos_for_item?id=${encodeURIComponent(item.id || '')}&name=${encodeURIComponent(item.ordner_name || item.titel || '')}`);
+        const vidData = await resVid.json();
+        const videos = vidData.videos || [];
+
+        document.getElementById("video-count").innerText = videos.length;
+        if (videos.length > 0) {
+          vidPlayer.src = videos[0].url;
+          vidPlayer.style.display = "block";
+          vidEmpty.style.display = "none";
+        } else {
+          vidPlayer.pause();
+          vidPlayer.src = "";
+          vidPlayer.style.display = "none";
+          vidEmpty.style.display = "block";
+        }
+      } catch (err) {
+        console.error("Fehler beim Laden der Videos:", err);
       }
     }
 
@@ -1178,6 +1618,19 @@ HTML_DASHBOARD = """<!DOCTYPE html>
       const payload = {
         id: it.id,
         titel: document.getElementById("input-title").value,
+        produktbeschreibung: document.getElementById("input-description").value,
+        hersteller_oder_marke: document.getElementById("input-manufacturer").value,
+        modell_oder_epoche: document.getElementById("input-epoch").value,
+        material: document.getElementById("input-material").value,
+        farbe: document.getElementById("input-color").value,
+        laenge_cm: document.getElementById("input-length").value,
+        breite_cm: document.getElementById("input-width").value,
+        hoehe_cm: document.getElementById("input-height").value,
+        gewicht_kg: document.getElementById("input-weight").value,
+        logistik_kategorie: document.getElementById("input-logistics").value,
+        zustand: document.getElementById("input-condition").value,
+        maengel: document.getElementById("input-defects").value,
+        fehlende_teile: document.getElementById("input-missing-parts").value,
         ErzielterPreis: parseFloat(document.getElementById("input-price").value) || it.Empfohlener_Retail_Preis_EUR,
         VerkaufsOrt: document.getElementById("input-platform").value,
         AngebotsFormat: document.getElementById("input-format").value,
@@ -1194,9 +1647,13 @@ HTML_DASHBOARD = """<!DOCTYPE html>
         if (resp.success) {
           showToast("✅ Artikel erfolgreich gespeichert & synchronisiert!");
           Object.assign(it, payload);
-          renderSidebar();
-          if (autoAdvance && selectedIndex < currentItems.length - 1) {
-            selectItem(selectedIndex + 1);
+          applySidebarFilters();
+          
+          if (autoAdvance) {
+            const currentFilterPos = filteredIndices.indexOf(selectedIndex);
+            if (currentFilterPos >= 0 && currentFilterPos < filteredIndices.length - 1) {
+              selectItem(filteredIndices[currentFilterPos + 1]);
+            }
           }
         }
       } catch (err) {
@@ -1211,7 +1668,7 @@ HTML_DASHBOARD = """<!DOCTYPE html>
         const data = await res.json();
         if (data.success) {
           showToast(`🚀 eBay Export erfolgreich! (${data.count} Artikel exportiert)`);
-          alert(`eBay CSV erfolgreich erstellt:\\n\\nDatei: ${data.csv}\\nPayload: ${data.json}\\n\\nAnzahl Artikel: ${data.count}`);
+          alert(`eBay CSV erfolgreich erstellt:\n\nDatei: ${data.csv}\nPayload: ${data.json}\n\nAnzahl Artikel: ${data.count}`);
         } else {
           showToast("❌ Export fehlgeschlagen: " + data.error);
         }
@@ -1278,6 +1735,14 @@ class StudioHTTPRequestHandler(BaseHTTPRequestHandler):
             self._set_headers("application/json; charset=utf-8")
             self.wfile.write(json.dumps({"images": img_list}).encode("utf-8"))
 
+        elif path == "/api/videos_for_item":
+            item_id = query.get("id", [""])[0]
+            item_name = query.get("name", [""])[0]
+            videos = find_item_videos(item_id, item_name, self.config.base_dir)
+            vid_list = [{"name": p.name, "url": f"/api/video?path={urllib.parse.quote(str(p))}"} for p in videos]
+            self._set_headers("application/json; charset=utf-8")
+            self.wfile.write(json.dumps({"videos": vid_list}).encode("utf-8"))
+
         elif path == "/api/image":
             img_path_str = query.get("path", [""])[0]
             if img_path_str:
@@ -1292,9 +1757,31 @@ class StudioHTTPRequestHandler(BaseHTTPRequestHandler):
                     self.send_header("Cache-Control", "max-age=3600")
                     self.end_headers()
                     with open(p, "rb") as f:
-                        self.wfile.write(f.read())
+                        shutil.copyfileobj(f, self.wfile)
                     return
             self.send_error(404, "Bild nicht gefunden")
+
+        elif path == "/api/video":
+            vid_path_str = query.get("path", [""])[0]
+            if vid_path_str:
+                p = Path(vid_path_str).resolve()
+                if p.exists() and p.is_file():
+                    mime = "video/mp4"
+                    if p.suffix.lower() == ".mov": mime = "video/quicktime"
+                    elif p.suffix.lower() == ".webm": mime = "video/webm"
+                    elif p.suffix.lower() == ".mkv": mime = "video/x-matroska"
+                    elif p.suffix.lower() == ".avi": mime = "video/x-msvideo"
+                    
+                    file_size = p.stat().st_size
+                    self.send_response(200)
+                    self.send_header("Content-Type", mime)
+                    self.send_header("Accept-Ranges", "bytes")
+                    self.send_header("Content-Length", str(file_size))
+                    self.end_headers()
+                    with open(p, "rb") as f:
+                        shutil.copyfileobj(f, self.wfile)
+                    return
+            self.send_error(404, "Video nicht gefunden")
 
         else:
             self.send_error(404, "Endpunkt nicht gefunden")
@@ -1369,7 +1856,7 @@ class StudioHTTPRequestHandler(BaseHTTPRequestHandler):
         }).encode("utf-8"))
 
     def _handle_get_items(self):
-        target_file = find_latest_execution_file(self.config.pipeline.output_dir)
+        target_file = self.__class__.current_file_path or find_latest_execution_file(self.config.pipeline.output_dir)
         self.__class__.current_file_path = target_file
 
         items = []
@@ -1382,6 +1869,18 @@ class StudioHTTPRequestHandler(BaseHTTPRequestHandler):
                 df = pd.read_excel(target_file, sheet_name=sheet_name)
                 for r in df.to_dict(orient="records"):
                     clean_r = {str(k).strip(): (v if pd.notna(v) else "") for k, v in r.items()}
+                    if "id" in clean_r and clean_r["id"] != "":
+                        clean_r["id"] = str(clean_r["id"])
+                    
+                    # Thumbnail ermitteln
+                    item_id = str(clean_r.get("id", "")).strip()
+                    item_name = str(clean_r.get("ordner_name", "") or clean_r.get("titel", "")).strip()
+                    images = find_item_images(item_id, item_name, self.config.base_dir)
+                    if images:
+                        clean_r["thumbnail_url"] = f"/api/image?path={urllib.parse.quote(str(images[0]))}"
+                    else:
+                        clean_r["thumbnail_url"] = ""
+
                     items.append(clean_r)
             except Exception as e:
                 logger.error(f"Fehler beim Lesen der Excel: {e}")
@@ -1405,8 +1904,10 @@ class StudioHTTPRequestHandler(BaseHTTPRequestHandler):
                     mask = df.index == 0
 
                 for k, v in payload.items():
-                    if k in df.columns:
-                        df.loc[mask, k] = v
+                    if k not in df.columns:
+                        df[k] = None
+                    df[k] = df[k].astype(object)
+                    df.loc[mask, k] = v
 
                 # Schreibe zurück
                 with pd.ExcelWriter(target_file, engine="openpyxl", mode="a", if_sheet_exists="replace") as writer:
