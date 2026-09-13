@@ -32,7 +32,7 @@ Zusätzlicher Kontext:
    - Vermeide Marktschreierei ("Museumsstück", "Rarität").
 6. 10 Ziel-Webseiten (Target Websites):
    - Ermittle genau 10 spezifische Plattformen oder Auktionsarchive, die für diese Art von Objekt repräsentative Preisdaten liefern können.
-   - Berücksichtige die Objektkategorie: Für Designermöbel z. B. Pamono, 1stDibs, eBay, Kleinanzeigen, Design-Market, VNTG, Selency; für Porzellan/Antiquitäten z. B. eBay (beendete Angebote), Kleinanzeigen, Catawiki, LiveAuctioneers, Dorotheum, Invaluable, Barnebys, Etsy.
+   - Berücksichtige die Objektkategorie: Für Designermöbel z. B. Pamono, 1stDibs, eBay, Kleinanzeigen, Design-Market, VNTG, Selency; für Porzellan/Antiquitäten z. B. eBay (primär beendete Angebote / Fallback: aktive Angebote), Kleinanzeigen, Catawiki, LiveAuctioneers, Dorotheum, Invaluable, Barnebys, Etsy.
    - Gib für jeden Vorschlag den Plattformnamen, optional eine konkrete Such-URL oder Domain, den optimalen Suchbegriff und eine Begründung an.
 
 # AUSGABEBEDINGUNGEN

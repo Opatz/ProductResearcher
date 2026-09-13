@@ -1,0 +1,27 @@
+[GOOGLE]
+; Trage hier deinen Google API Key ein oder setze die Umgebungsvariable GEMINI_API_KEY
+api_key = DEIN_GOOGLE_API_KEY_HIER
+; Standardmodell: gemini-3.5-flash-lite
+model_name = gemini-3.5-flash-lite
+; Live-Websuche (Google Search Grounding) für vertiefte Marktwert- & Auktionsrecherche in Prompt 2
+enable_google_search = true
+
+[PIPELINE]
+; Ordner für Rohaufnahmen (Bilder und Videos nach Aufnahmezeitpunkt)
+raw_dir = input/raw
+; Ordner für bereinigte/vorverarbeitete Rohdateien
+processed_dir = input/processed
+; Ordner für fertig sortierte Artikel (Artikel_1, Artikel_2 etc.)
+artikel_dir = input/artikel
+; Standard-Eingabeordner für die Pipeline-Verarbeitung
+input_dir = input/artikel
+; Ordner für zusätzliche Kontextinformationen und Richtlinien zu den Prompts
+context_dir = prompt_context
+; Ordner für vollständig verarbeitete und exportierte Artikel (Completed Folder)
+completed_dir = input/completed
+; Basisverzeichnis für alle generierten Zwischen- und Endergebnisse
+output_dir = output
+; Dauer für den Video-Vorspann-Schnitt in Sekunden
+preview_duration_sec = 5.0
+; Sprache oder Kontext-Hinweise für die Transkription
+transcription_language = de

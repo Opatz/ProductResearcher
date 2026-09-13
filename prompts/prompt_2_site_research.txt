@@ -26,9 +26,9 @@ Zustand des Originals: {zustand}
 # RECHERCHE- UND BEWERTUNGSREGELN
 
 1. Untersuche die genannte Plattform ({target_site_name}) exklusiv nach dem gesuchten Objekt oder möglichst identischen Vergleichsobjekten.
-2. Preis-Klassifikation (`preis_typ`):
-   - `realisierter_verkaufspreis`: Tatsächlich stattgefundener, abgeschlossener Verkauf oder Auktionszuschlag (z. B. "verkaufter Artikel" auf eBay, Auktionsergebnis). Hat höchste Priorität!
-   - `angebotspreis`: Aktiver Händler- oder Privat-Angebotspreis (noch nicht verkauft).
+2. Prioritäts-Kaskade für Preis-Klassifikation (`preis_typ`):
+   - Priorität 1 (`realisierter_verkaufspreis`): Suche primär nach tatsächlich stattgefundenen, abgeschlossenen Verkäufen oder Auktionszuschlägen (z. B. "verkaufter/beendeter Artikel" auf eBay mit LH_Sold=1, Auktionsergebnis). Hat höchste Priorität!
+   - Priorität 2 (`angebotspreis`): Falls auf der Zielplattform KEINE beendeten/verkauften Artikel auffindbar sind, weiche unmittelbar auf das ähnlichste/relevanteste AKTIVE Angebot (Sofort-Kauf / Inserat) aus und klassifiziere `preis_typ` verbindlich als `angebotspreis`.
    - `auktionsgebot`: Aktuelles Gebot einer noch laufenden Auktion.
    - `schaetzpreis`: Reines Auktions-Estimate / Schätzpreisspanne.
    - `unbekannt`: Wenn unklar.

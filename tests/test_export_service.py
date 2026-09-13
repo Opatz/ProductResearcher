@@ -17,7 +17,7 @@ from services.export_service import ExportService
 
 
 class TestExportService(unittest.TestCase):
-    """Testfälle für den Multi-Sheet Excel- und CSV-Export gem. Issue 03 und spec.md."""
+    """Testfälle für den 2-Sheet Excel- und CSV-Export gem. ADR 0002 und ADR 0003."""
 
     def setUp(self):
         self.test_dir = Path(tempfile.mkdtemp())
@@ -147,8 +147,8 @@ class TestExportService(unittest.TestCase):
             begruendung_preisfindung="Auktions- und eBay-Verkäufe zwischen 280 € und 310 € bilden das solide Preisniveau.",
             ausreisser_bereinigung_notiz="Pamono- und 1stDibs-Galeriepreise (750-850 €) als Händleraufschläge eingestuft.",
             produktbeschreibung="Verkaufsfertige Produktbeschreibung: Authentischer Vintage-Teaktisch aus den 1960er Jahren.",
-            physische_merkmale={"material": "Teakholz massiv", "breite_cm": 80.0, "laenge_cm": 120.0, "hoehe_cm": 50.0},
-            zustandsbericht={"zustand": "gut", "maengel": ["Leichte Oberflächenkratzer"]}
+            physische_merkmale={"material": "Teak massiv", "breite_cm": 80.0, "laenge_cm": 120.0, "hoehe_cm": 50.0},
+            zustandsbericht={"zustand": "gut", "maengel": ["Kratzer 5cm"]}
         )
 
         # PipelineState erstellen
@@ -157,18 +157,7 @@ class TestExportService(unittest.TestCase):
             video_path=Path("input/Artikel_4092/video.mp4"),
             run_dir=self.test_dir,
             detected_id="ARTIKEL-4092",
-            step1_filter_json={
-                "titel": "Vintage-Designertisch Mid-Century Teak",
-                "kategorie": "Möbel",
-                "material": "Teak massiv",
-                "laenge_cm": 120.0,
-                "breite_cm": 80.0,
-                "hoehe_cm": 50.0,
-                "maengel": ["Kratzer 5cm"],
-                "fehlende_teile": [],
-                "preise": {"einkaufspreis_eur": 120.0, "erwarteter_preis_eur": 300.0}
-            },
-            step2_analysis_json={
+            visual_analysis_json={
                 "titel": "Vintage-Designertisch Mid-Century Teak",
                 "kategorie": "Möbel",
                 "produktbeschreibung": "Verkaufsfertige Produktbeschreibung: Authentischer Vintage-Teaktisch aus den 1960er Jahren.",
@@ -179,14 +168,7 @@ class TestExportService(unittest.TestCase):
                 "laenge_cm": 120.0,
                 "breite_cm": 80.0,
                 "hoehe_cm": 50.0,
-                "maengel": ["Kratzer 5cm"],
-                "geschaetzter_retail_preis_eur": 285.0,
-                "preisspanne_min_eur": 240.0,
-                "preisspanne_max_eur": 350.0,
-                "median_web_preis_eur": 300.0,
-                "anzahl_gefundene_preise": 8,
-                "begruendung_preisfindung": "Auktions- und eBay-Verkäufe zwischen 280 € und 310 € bilden das solide Preisniveau.",
-                "ausreisser_bereinigung_notiz": "Pamono- und 1stDibs-Galeriepreise als Händleraufschläge bereinigt."
+                "maengel": ["Kratzer 5cm"]
             },
             reference_listings=[l.model_dump(mode="json") for l in self.sample_listings],
             discovered_web_sources=[l.model_dump(mode="json") for l in self.sample_listings],
@@ -225,20 +207,17 @@ class TestExportService(unittest.TestCase):
         self.assertEqual(first_row["Match_Genauigkeit"], MatchGenauigkeit.EXAKTER_TREFFER.value)
         self.assertEqual(first_row["Status"], RechercheStatus.ERFOLGREICH.value)
 
-        # Hyperlink-Formel prüfen
         link_formula = first_row["Link_URL"]
         self.assertTrue(link_formula.startswith("=HYPERLINK("))
         self.assertIn("https://www.ebay.de/itm/123456789", link_formula)
 
-        # Prüfe Zeile ohne URL (AnticStore)
         empty_url_row = rows[9]
         self.assertNotIn("=HYPERLINK", empty_url_row["Link_URL"])
 
     def test_build_unified_item_row_contains_valuation_summary_columns(self):
-        """Prüft, ob build_unified_item_row die 7 neuen Bewertungsspalten auf Hauptempfehlung enthält."""
+        """Prüft, ob build_unified_item_row die Bewertungsspalten auf Hauptempfehlung enthält."""
         row = ExportService.build_unified_item_row_from_state(self.state)
 
-        # 7 Geforderte Spalten
         self.assertEqual(row["Empfohlener_Retail_Preis_EUR"], 285.0)
         self.assertEqual(row["Preisspanne_Min_EUR"], 240.0)
         self.assertEqual(row["Preisspanne_Max_EUR"], 350.0)
@@ -247,7 +226,6 @@ class TestExportService(unittest.TestCase):
         self.assertIn("https://", row["Top_Referenz_Links"])
         self.assertIn("Auktions- und eBay-Verkäufe", row["Begruendung_Preisfindung"])
 
-        # Kernattribute müssen vollständig erhalten sein
         self.assertIn("Verkaufsfertige Produktbeschreibung", row["produktbeschreibung"])
         self.assertEqual(row["material"], "Teak massiv")
         self.assertEqual(row["laenge_cm"], 120.0)
@@ -255,8 +233,8 @@ class TestExportService(unittest.TestCase):
         self.assertEqual(row["hoehe_cm"], 50.0)
         self.assertEqual(row["maengel"], "Kratzer 5cm")
 
-    def test_export_single_item_creates_multi_sheet_with_web_prices(self):
-        """Prüft, ob export_single_item die Sheets Hauptempfehlung und Marktrecherche_Webpreise korrekt anlegt."""
+    def test_export_single_item_creates_2_sheets_with_web_prices(self):
+        """Prüft, ob export_single_item genau die 2 Sheets Hauptempfehlung und Marktrecherche_Webpreise anlegt."""
         result = self.export_service.export_single_item(self.state, "test_item")
         excel_path = result["excel"]
         self.assertTrue(excel_path.exists())
@@ -264,17 +242,12 @@ class TestExportService(unittest.TestCase):
         wb = openpyxl.load_workbook(excel_path)
         sheet_names = wb.sheetnames
 
-        self.assertIn("Hauptempfehlung", sheet_names)
-        self.assertIn("Marktrecherche_Webpreise", sheet_names)
-        self.assertEqual(sheet_names[0], "Hauptempfehlung")
-        self.assertEqual(sheet_names[1], "Marktrecherche_Webpreise")
+        self.assertEqual(sheet_names, ["Hauptempfehlung", "Marktrecherche_Webpreise"])
 
-        # Prüfe Inhalt von Marktrecherche_Webpreise
         ws_web = wb["Marktrecherche_Webpreise"]
         self.assertEqual(ws_web.max_row, 11)  # 1 Header-Zeile + 10 Datenzeilen
         self.assertEqual(ws_web.max_column, 9)
 
-        # Header prüfen
         headers = [ws_web.cell(row=1, column=c).value for c in range(1, 10)]
         self.assertListEqual(headers, [
             "Artikel_ID",
@@ -288,7 +261,6 @@ class TestExportService(unittest.TestCase):
             "Link_URL"
         ])
 
-        # Prüfe Formel und Formatierung der Link-Zelle mit Hilfsmethode
         link_cell = ws_web.cell(row=2, column=9)
         self.assert_valid_hyperlink_cell(link_cell, expected_url="https://www.ebay.de/itm/123456789")
 
@@ -298,70 +270,23 @@ class TestExportService(unittest.TestCase):
         self.assertTrue(val.startswith("=HYPERLINK("))
         if expected_url:
             self.assertIn(expected_url, val)
-        self.assertEqual(cell.data_type, "f")  # formula cell
+        self.assertEqual(cell.data_type, "f")
         self.assertEqual(cell.font.color.rgb, "FF0563C1")
         self.assertEqual(cell.font.underline, "single")
 
-    def test_export_preserves_downstream_sheets(self):
-        """Prüft, ob Alle_Massnahmen_Details und Varianten_Prompt3 erhalten bleiben wenn vorhanden."""
-        self.state.step4_preis_steigerer_json = {
-            "massnahmen_bewertungen": [
-                {
-                    "variante_nr": 1,
-                    "bezeichnung": "Politur",
-                    "investitionskosten_eur": 50.0,
-                    "ziel_verkaufspreis_eur": 600.0
-                }
-            ]
-        }
-        self.state.step3_varianten_json = {
-            "varianten": [
-                {
-                    "variante_nr": 1,
-                    "bezeichnung": "Ist-Zustand",
-                    "prognostizierter_preis_realistisch_eur": 300.0
-                }
-            ]
-        }
-
-        result = self.export_service.export_single_item(self.state, "test_item_all_sheets")
-        wb = openpyxl.load_workbook(result["excel"])
-        sheet_names = wb.sheetnames
-
-        self.assertIn("Hauptempfehlung", sheet_names)
-        self.assertIn("Marktrecherche_Webpreise", sheet_names)
-        self.assertIn("Alle_Massnahmen_Details", sheet_names)
-        self.assertIn("Varianten_Prompt3", sheet_names)
-
-    def test_export_preserves_raw_list_variants_prompt3(self):
-        """Prüft, ob step3_varianten_json als Rohliste ebenfalls als Varianten_Prompt3 exportiert wird."""
-        self.state.step3_varianten_json = [
-            {"variante_nr": 1, "bezeichnung": "Ist-Zustand", "preis": 250.0},
-            {"variante_nr": 2, "bezeichnung": "Aufbereitet", "preis": 450.0}
-        ]
-        result = self.export_service.export_single_item(self.state, "test_item_list_var")
-        wb = openpyxl.load_workbook(result["excel"])
-        self.assertIn("Varianten_Prompt3", wb.sheetnames)
-        ws_var = wb["Varianten_Prompt3"]
-        self.assertEqual(ws_var.max_row, 3)  # 1 Header + 2 Zeilen
-
     def test_export_consolidated_batch_with_web_research(self):
-        """Prüft, ob export_consolidated_batch auch die Marktrecherche_Webpreise Tabelle integriert."""
+        """Prüft, ob export_consolidated_batch Alle_Artikel und Marktrecherche_Webpreise sauber exportiert."""
         item_row = ExportService.build_unified_item_row_from_state(self.state)
         web_rows = ExportService.build_web_research_rows("ARTIKEL-4092", self.sample_listings)
-        measure_rows = [{"artikel_id": "ARTIKEL-4092", "massnahme": "Politur"}]
 
         batch_result = self.export_service.export_consolidated_batch(
             items_rows=[item_row],
-            measures_rows=measure_rows,
             web_research_rows=web_rows,
             base_filename="consolidated_test"
         )
 
         wb = openpyxl.load_workbook(batch_result["excel"])
-        self.assertIn("Alle_Artikel", wb.sheetnames)
-        self.assertIn("Marktrecherche_Webpreise", wb.sheetnames)
-        self.assertIn("Alle_Massnahmen_Gesamt", wb.sheetnames)
+        self.assertEqual(wb.sheetnames, ["Alle_Artikel", "Marktrecherche_Webpreise"])
 
         ws_web = wb["Marktrecherche_Webpreise"]
         self.assertEqual(ws_web.max_row, 11)
@@ -392,17 +317,6 @@ class TestExportService(unittest.TestCase):
         formula = rows[0]["Link_URL"]
         self.assertTrue(formula.startswith("=HYPERLINK("))
         self.assertIn('""Modell 42""', formula)
-
-    def test_fallback_without_synthesis(self):
-        """Prüft, ob ohne Synthese-JSON sauber auf Step2 / Step1 Werte zurückgegriffen wird."""
-        self.state.retail_price_synthesis_json = None
-        self.state.web_price_summary = None
-        row = ExportService.build_unified_item_row_from_state(self.state)
-        self.assertEqual(row["Empfohlener_Retail_Preis_EUR"], 285.0)
-        self.assertEqual(row["Preisspanne_Min_EUR"], 240.0)
-        self.assertEqual(row["Preisspanne_Max_EUR"], 350.0)
-        self.assertEqual(row["Median_Web_Preis_EUR"], 300.0)
-        self.assertEqual(row["Anzahl_gefundene_Webpreise"], 8)
 
 
 if __name__ == "__main__":

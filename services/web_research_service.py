@@ -25,9 +25,9 @@ DEFAULT_TARGET_SITES: List[Dict[str, str]] = [
     {
         "website_name": "eBay (Beendete Angebote)",
         "target_url": "https://www.ebay.de/sch/i.html?LH_Sold=1&LH_Complete=1",
-        "suchbegriff": "{titel} sold",
+        "suchbegriff": "{titel}",
         "plattform_typ": "marktplatz",
-        "begruendung": "Realisierte Verkäufe auf dem größten Gebraucht- und Sammlermarkt"
+        "begruendung": "Primär beendete Verkäufe (LH_Sold=1); Fallback auf aktive Angebote bei 0 Treffern"
     },
     {
         "website_name": "Kleinanzeigen",

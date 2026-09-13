@@ -96,19 +96,31 @@ class AppraiserService:
             valid_listings.append(listing)
 
         # Statistische Kennzahlen über alle validen Treffer
-        valid_prices = [l.preis_eur for l in valid_listings if l.preis_eur is not None]
+        valid_prices = [l.preis_eur for l in valid_listings if l.preis_eur is not None and l.preis_eur > 0]
         anzahl_gefundene_preise = len(valid_prices)
 
-        if valid_prices:
-            median_web_preis = float(statistics.median(valid_prices))
-        else:
-            # Fallback auf Schätzpreis aus Katalog oder Schritt 1
-            fallback_price = float(
-                catalog_data.get("geschaetzter_preis")
-                or catalog_data.get("aktueller_ist_wert_eur")
-                or 300.0
+        # ZERO-DATA ANTI-HALLUZINATIONS-POLICY: Wenn 0 valide Webpreise existieren, keine Fantasiepreise generieren
+        if not valid_prices:
+            return RetailPriceSynthesis(
+                geschaetzter_retail_preis_eur=0.0,
+                preisspanne_min_eur=0.0,
+                preisspanne_max_eur=0.0,
+                median_web_preis_eur=0.0,
+                anzahl_gefundene_preise=0,
+                begruendung_preisfindung=(
+                    "Keine empirischen Referenzpreise im Web ermittelt. "
+                    "Gemäß Zero-Data-Policy wurde keine automatische Preisschätzung vorgenommen. "
+                    "Manuelle Begutachtung erforderlich."
+                ),
+                ausreisser_bereinigung_notiz="Keine Referenzdaten verfügbar.",
+                produktbeschreibung=catalog_data.get("produktbeschreibung") or "",
+                physische_merkmale=catalog_data.get("physische_merkmale") or {},
+                zustandsbericht=catalog_data.get("zustandsbericht") or {},
+                ausgeschlossene_preise=excluded_listings,
+                bereinigte_preise=[]
             )
-            median_web_preis = fallback_price
+
+        median_web_preis = float(statistics.median(valid_prices))
 
         # 2. Plattform-Reconciliation & Ausreißer-Erkennung
         # Gruppierung nach Preistypen
@@ -161,30 +173,27 @@ class AppraiserService:
         for exc in excluded_listings:
             outlier_notes.append(f"{exc.get('website_name', 'Unbekannt')}: {exc.get('grund', 'Ausgeschlossen')}.")
 
-        # 3. Basispreis aus bereinigten Preisen ermitteln (Priorität auf Realized)
+        # 3. Basispreis aus bereinigten Preisen ermitteln
+        # Fall A: Realisierte Verkaufspreise vorhanden -> Strikter Vorrang (keine Verwässerung durch reine Angebotspreise)
         if realized_listings:
-            realized_vals = [l.preis_eur for l in realized_listings if l.preis_eur]
+            realized_vals = [l.preis_eur for l in realized_listings if l.preis_eur and l.preis_eur > 0]
             realized_anchor = float(statistics.median(realized_vals))
-            if adjusted_prices:
-                # 75% Realized Anchor, 25% restlicher Marktkonsens
-                base_market_price = (realized_anchor * 0.75) + (float(statistics.median(adjusted_prices)) * 0.25)
-            else:
-                base_market_price = realized_anchor
+            base_market_price = realized_anchor
             pricing_rationale_lead = (
                 f"Die Wertermittlung basiert primär auf {len(realized_listings)} verifizierten realisierten Verkaufspreisen "
-                f"(Anker bei ca. {realized_anchor:.2f} €), die spekulativen Händlerpreisen strikt vorgezogen wurden."
+                f"(Anker bei ca. {realized_anchor:.2f} €), die Angebotspreisen strikt vorgezogen wurden."
             )
+        # Fall B: Keine realisierten Verkäufe -> Fallback auf bereinigte aktive Angebotspreise mit 15% Sicherheitsabschlag
         elif adjusted_prices:
             raw_asking_median = float(statistics.median(adjusted_prices))
-            # Reiner Angebotspreis-Markt: Konservativer 15% Sicherheitsabschlag auf den bereinigten Median
             base_market_price = round(raw_asking_median * 0.85, 2)
             pricing_rationale_lead = (
-                f"Da keine beendeten Verkäufe vorlagen, wurde der Median der bereinigten Angebotspreise "
-                f"({raw_asking_median:.2f} €) mit einem konservativen 15% Sicherheitsabschlag ({base_market_price:.2f} €) als Basis herangezogen."
+                f"Da keine beendeten Verkäufe vorlagen, wurde der Fallback auf aktive Angebotspreise angewendet: "
+                f"Median der bereinigten Angebotspreise ({raw_asking_median:.2f} €) mit 15% Sicherheitsabschlag ({base_market_price:.2f} €) als Basiswert."
             )
         else:
             base_market_price = median_web_preis
-            pricing_rationale_lead = f"Wertermittlung basiert auf der vorläufigen Objekttaxierung ({base_market_price:.2f} €)."
+            pricing_rationale_lead = f"Wertermittlung basiert auf den ermittelten Web-Referenzpreisen ({base_market_price:.2f} €)."
 
         # 4. Kalibrierte Zustands- und Mängelabschläge
         zustandsbericht = catalog_data.get("zustandsbericht") or {}
@@ -212,11 +221,15 @@ class AppraiserService:
             condition_discount_factor = 1.0
             condition_note = "Überdurchschnittlich guter bzw. neuwertiger Erhaltungszustand ohne werteinschränkende Mängel."
 
-
         # Finaler geschätzter Retail-Preis
-        geschaetzter_retail_preis = round(base_market_price * condition_discount_factor, 2)
-        preisspanne_min = round(geschaetzter_retail_preis * 0.85, 2)
-        preisspanne_max = round(geschaetzter_retail_preis * 1.18, 2)
+        if base_market_price > 0.0:
+            geschaetzter_retail_preis = round(base_market_price * condition_discount_factor, 2)
+            preisspanne_min = round(geschaetzter_retail_preis * 0.85, 2)
+            preisspanne_max = round(geschaetzter_retail_preis * 1.18, 2)
+        else:
+            geschaetzter_retail_preis = 0.0
+            preisspanne_min = 0.0
+            preisspanne_max = 0.0
 
         begruendung = (
             f"{pricing_rationale_lead} {condition_note} "
@@ -257,6 +270,11 @@ class AppraiserService:
 
         if not self.gemini_service:
             logger.info("Kein GeminiService aktiv -> verwende deterministische Gutachter-Synthese.")
+            return baseline
+
+        # Zero-Data Anti-Halluzinations-Policy: Wenn 0 Preise gefunden wurden, kein LLM-Raten
+        if baseline.anzahl_gefundene_preise == 0:
+            logger.info("Keine validen Web-Referenzpreise vorhanden -> Verwende Zero-Data Baseline ohne LLM-Aufruf.")
             return baseline
 
         # Prompt vorbereiten

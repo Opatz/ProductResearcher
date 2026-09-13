@@ -13,6 +13,7 @@ from config.settings import load_config
 from pipeline.orchestrator import VideoLLMPipeline
 from services.export_service import ExportService
 from services.sorter_service import MediaSorterService
+from services.ebay_service import EbayService
 
 
 @dataclass
@@ -76,16 +77,11 @@ def discover_item_tasks(input_path: Path) -> List[ItemTask]:
         subdirs.sort(key=lambda x: x.name)
     
     for folder in subdirs:
-        # Finde Videos im Unterordner
         videos = [f for f in folder.iterdir() if f.is_file() and f.suffix.lower() in video_extensions]
-        # Finde Bilder im Unterordner
         images = [f for f in folder.iterdir() if f.is_file() and f.suffix.lower() in image_extensions]
-        
-        # Sortiere Bilder alphabetisch
         images = sorted(images, key=lambda x: x.name)
 
         if videos:
-            # Erstelle Task für das erste gefundene Video im Ordner
             tasks.append(ItemTask(
                 item_name=folder.name,
                 video_path=videos[0],
@@ -115,29 +111,24 @@ def run_sorting_process(
     gemini_service: Optional[Any] = None
 ) -> List[Path]:
     """Führt den Raw Ingest Sortier- und Quarantäneprozess mit konfigurierten Flags aus."""
-    # 1. Quellverzeichnisse
     if getattr(args, "source", None):
         source_dirs = [Path(args.source).resolve()]
     else:
         source_dirs = [d for d in [config.pipeline.processed_dir, config.pipeline.raw_dir] if d.exists()]
 
-    # 2. Zielverzeichnis (Standard: input/artikel/)
     if getattr(args, "target", None):
         target_dir = Path(args.target).resolve()
     else:
         target_dir = config.pipeline.artikel_dir.resolve()
 
-    # 3. Quarantäne- und Inspektionsverzeichnis (Standard: output/to_inspect/)
     if getattr(args, "inspect", None):
         inspect_dir = Path(args.inspect).resolve()
     else:
         inspect_dir = (config.pipeline.output_dir / "to_inspect").resolve()
 
-    # 4. Datei-Operation: Verschieben (Move) als Standard, Kopieren (Copy) bei --copy
     move_files = not getattr(args, "copy", False)
 
-    # Gemini-Service initialisieren, falls nicht übergeben und nicht im Mock-Modus
-    if gemini_service is None and not getattr(args, "mock", False) and config.google.api_key:
+    if gemini_service is None and config.google.api_key:
         try:
             from services.gemini_service import GeminiService
             gemini_service = GeminiService(
@@ -167,7 +158,7 @@ def main():
     logger = logging.getLogger("Main")
 
     parser = argparse.ArgumentParser(
-        description="Agentische Video- & Bild-Verarbeitungs-Pipeline mit automatischer Sortierung, Prompt-Chaining und Excel-Export"
+        description="Multimodale 3-Stufen Marktbewertungs-Pipeline für Antiquitäten & Sammlerobjekte"
     )
     parser.add_argument(
         "-v", "--video", 
@@ -177,7 +168,7 @@ def main():
     parser.add_argument(
         "-i", "--images",
         nargs="*",
-        help="Optionale Pfade zu Bildern für Prompt 2 (zusammen mit --video)"
+        help="Optionale Pfade zu Detailbildern (zusammen mit --video)"
     )
     parser.add_argument(
         "-b", "--batch-dir", 
@@ -220,11 +211,6 @@ def main():
         help="Überspringt die automatische Sortierung von input/raw"
     )
     parser.add_argument(
-        "--mock", 
-        action="store_true", 
-        help="Führt die Pipeline im Test-/Mock-Modus aus (ohne Google API Aufrufe)"
-    )
-    parser.add_argument(
         "--item",
         type=str,
         help="Verarbeitet nur einen bestimmten Artikel-Ordner (z. B. 'Artikel_1' oder '1')"
@@ -234,13 +220,157 @@ def main():
         type=str, 
         help="Überschreibt das in config.ini festgelegte Gemini-Modell"
     )
+    parser.add_argument(
+        "--review-ui", "--ui",
+        action="store_true",
+        help="Startet das webbasierte grafische Split-Screen Human-in-the-Loop Studio (Item Research Studio)"
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=8501,
+        help="Port für das Review UI Studio (Standard: 8501)"
+    )
+    parser.add_argument(
+        "--ebay-export", "--ebay",
+        action="store_true",
+        help="Führt den dedizierten eBay-Export (Seller Hub File Exchange CSV & API Payload) durch"
+    )
+    parser.add_argument(
+        "--ebay-publish",
+        action="store_true",
+        help="Veröffentlicht die vorbereiteten Artikel direkt über die offizielle eBay Sell Inventory & Offer REST API"
+    )
+    parser.add_argument(
+        "--ebay-file",
+        type=str,
+        help="Pfad zur geprüften Excel-/CSV-Datei für den eBay-Export (Standard: neuste Datei in output/)"
+    )
+    parser.add_argument(
+        "--ebay-status",
+        type=str,
+        default="all",
+        help="Filter für Freigabe-Status beim eBay-Export (Standard: 'all' = alle Artikel exportieren, oder z.B. 'Freigegeben')"
+    )
+    parser.add_argument(
+        "--ebay-platform",
+        type=str,
+        default="all",
+        help="Filter für VerkaufsOrt beim eBay-Export (Standard: 'all' = alle Artikel)"
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Führt eine Validierungs-Prüfung ohne Erstellung oder Übertragung von Dateien durch"
+    )
 
     args = parser.parse_args()
 
-    # Konfiguration laden
     config = load_config()
     if args.model:
         config.google.model_name = args.model
+
+    # ==========================================
+    # REVIEW UI STUDIO (--review-ui oder --ui)
+    # ==========================================
+    if getattr(args, "review_ui", False):
+        from services.ui_server import start_ui_server
+        start_ui_server(port=args.port)
+        sys.exit(0)
+
+    # ==========================================
+    # DEDIZIERTER EBAY EXPORT & API PUBLISH (--ebay-export oder --ebay-publish)
+    # ==========================================
+    if getattr(args, "ebay_export", False) or getattr(args, "ebay_publish", False):
+        from services.ebay_service import EbayService
+        from services.ebay_api_client import EbayApiClient
+        from services.ui_server import find_latest_execution_file
+
+        is_api_publish = getattr(args, "ebay_publish", False)
+        mode_label = "REST API LIVE PUBLISH" if is_api_publish else "SELLER HUB CSV EXPORT"
+
+        logger.info("=" * 70)
+        logger.info(f"🏛️ DEDIZIERTER EBAY {mode_label} GESTARTET {'[DRY-RUN]' if args.dry_run else ''}")
+        logger.info("=" * 70)
+
+        source_file = None
+        if args.ebay_file:
+            source_file = Path(args.ebay_file).resolve()
+        else:
+            source_file = find_latest_execution_file(config.pipeline.output_dir)
+
+        if not source_file or not source_file.exists():
+            logger.error("❌ Keine Quelldatei für den eBay-Export gefunden. Bitte erstelle zuerst einen Pipeline-Lauf oder gib --ebay-file an.")
+            sys.exit(1)
+
+        logger.info(f"Quelldatei:      {source_file}")
+        if args.ebay_status != "all":
+            logger.info(f"Status-Filter:   {args.ebay_status}")
+        if args.ebay_platform != "all":
+            logger.info(f"Plattform-Filter:{args.ebay_platform}")
+
+        ebay_service = EbayService(settings=config.ebay, output_dir=config.pipeline.output_dir)
+        try:
+            items = ebay_service.load_items_from_source(
+                source_path=source_file,
+                status_filter=args.ebay_status,
+                platform_filter=args.ebay_platform if args.ebay_platform != "all" else None
+            )
+            logger.info(f"Zu verarbeitende Artikel gefunden: {len(items)}")
+            if not items:
+                logger.warning("⚠️ Keine Artikel in der Quelldatei gefunden.")
+                sys.exit(0)
+
+            payloads = ebay_service.build_ebay_api_payloads(items)
+
+            if args.dry_run:
+                rows = ebay_service.build_ebay_file_exchange_rows(items)
+                logger.info("=" * 70)
+                logger.info(f"🔍 [DRY-RUN] Validierung erfolgreich für {len(rows)} Artikel:")
+                for r in rows:
+                    logger.info(f"  • SKU {r['CustomLabel']}: '{r['Title']}' -> {r['StartPrice']} EUR (ConditionID: {r['ConditionID']}, Format: {r['Format']})")
+                logger.info("=" * 70)
+                sys.exit(0)
+
+            if is_api_publish:
+                api_client = EbayApiClient(settings=config.ebay)
+                if not api_client.is_configured:
+                    logger.error(
+                        "❌ Keine eBay API Credentials gefunden!\n"
+                        "Bitte setze 'EBAY_USER_TOKEN' oder 'EBAY_APP_ID' und 'EBAY_CERT_ID' in der .env Datei."
+                    )
+                    sys.exit(1)
+
+                logger.info(f"Starte API-Veröffentlichung für {len(payloads)} Artikel ({api_client.environment})...")
+                results = api_client.publish_batch(payloads)
+                success_published = [r for r in results if r.get("status") == "PUBLISHED_LIVE"]
+                logger.info("=" * 70)
+                logger.info(f"🎉 EBAY API VERÖFFENTLICHUNG ABGESCHLOSSEN: {len(success_published)}/{len(payloads)} LIVE!")
+                for res in results:
+                    sku = res.get("sku")
+                    if res.get("status") == "PUBLISHED_LIVE":
+                        logger.info(f"  ✅ SKU {sku}: ListingID '{res.get('listingId')}' -> {res.get('listingUrl')}")
+                    else:
+                        logger.error(f"  ❌ SKU {sku} Fehlgeschlagen: {res.get('error')}")
+                logger.info("=" * 70)
+                sys.exit(0)
+
+            result = ebay_service.export_ebay_batch(
+                items=items,
+                output_dir=config.pipeline.output_dir,
+                filename_prefix="ebay_listings"
+            )
+
+            logger.info("=" * 70)
+            logger.info("✅ EBAY EXPORT ERFOLGREICH ABGESCHLOSSEN!")
+            logger.info(f"  📄 eBay CSV (File Exchange): {result['csv']}")
+            logger.info(f"  📦 eBay JSON (API Payload):  {result['json']}")
+            logger.info(f"  🎯 Exportierte Artikel:      {result['count']}")
+            logger.info("=" * 70)
+            sys.exit(0)
+        except Exception as e:
+            logger.error(f"❌ Fehler beim eBay-Export: {e}")
+            sys.exit(1)
 
     # ==========================================
     # STANDALONE RAW INGEST SORTIERUNG (--sort-raw oder --sort-only)
@@ -249,7 +379,7 @@ def main():
         logger.info("=" * 70)
         logger.info("🤖 RAW INGEST STANDALONE-SORTIERUNG GESTARTET")
         has_key = bool(config.google.api_key)
-        mode_str = "MOCK (Testlauf)" if args.mock else ("LIVE (Gemini Vision)" if has_key else "FALLBACK (Kein API-Key)")
+        mode_str = "LIVE (Gemini Vision)" if has_key else "FALLBACK (Kein API-Key)"
         logger.info(f"Modus:              {mode_str}")
         logger.info(f"Datei-Operation:    {'KOPIEREN (Copy)' if args.copy else 'VERSCHIEBEN (Move)'}")
         if args.source:
@@ -273,19 +403,17 @@ def main():
     logger.info("🤖 AGENTISCHE MULTIMODALE VIDEO- & BILD-PIPELINE GESTARTET")
     logger.info(f"Zeitstempel-Ordner: {execution_dir.name}")
     logger.info(f"Standard-Modell:    {config.google.model_name}")
-    logger.info(f"Modus:              {'MOCK (Testlauf)' if args.mock else 'LIVE (Google Gemini API)'}")
     logger.info("=" * 70)
 
-    # API-Key Überprüfung für den Live-Modus
-    if not args.mock and not config.google.api_key:
+    # API-Key Überprüfung
+    if not config.google.api_key:
         logger.error(
             "❌ Kein Google API Key konfiguriert!\n"
-            "Bitte trage deinen Key in 'config/config.ini' ein oder setze die Umgebungsvariable 'GEMINI_API_KEY'.\n"
-            "Tipp: Für einen schnellen Funktionstest kannst du das Flag '--mock' verwenden."
+            "Bitte trage deinen Key in 'config/config.ini' ein oder setze die Umgebungsvariable 'GEMINI_API_KEY'."
         )
         sys.exit(1)
 
-    pipeline = VideoLLMPipeline(config=config, execution_dir=execution_dir, mock_mode=args.mock)
+    pipeline = VideoLLMPipeline(config=config, execution_dir=execution_dir)
 
     # ==========================================
     # VORSCHRITT: Automatische Sortierung vor Pipeline-Start
@@ -308,7 +436,7 @@ def main():
                 args=args,
                 config=config,
                 logger=logger,
-                gemini_service=pipeline.gemini_service if not args.mock else None
+                gemini_service=pipeline.gemini_service
             )
             target_disp = args.target or config.pipeline.artikel_dir.name
             logger.info(f"✅ {len(new_folders)} neue Artikel-Ordner in '{target_disp}' einsortiert.\n")
@@ -328,7 +456,6 @@ def main():
             image_paths=img_paths
         ))
     else:
-        # Priorisiere args.batch_dir, dann args.target, dann config.pipeline.artikel_dir
         if args.batch_dir:
             search_dir = Path(args.batch_dir).resolve()
         elif args.target:
@@ -351,13 +478,6 @@ def main():
 
         if not tasks:
             logger.info("ℹ️ Keine verarbeitbaren Artikel-Ordner gefunden.")
-            logger.info("👉 Du kannst Rohaufnahmen (Bilder + Videos) einfach in 'input/processed/' oder 'input/raw/' ablegen:")
-            logger.info("   input/processed/")
-            logger.info("   ├── 2026-08-30 at 11.20.06.jpeg      (Erstes Bild mit ID/Nummer)")
-            logger.info("   ├── 2026-08-30 at 11.20.07.jpeg")
-            logger.info("   ├── 2026-08-30 at 11.20.11.mp4       (Schließt Artikel 1 ab)")
-            logger.info("   ├── 2026-08-30 at 11.20.12.jpeg      (Startet Artikel 2)")
-            logger.info("   └── 2026-08-30 at 11.20.16.mp4       (Schließt Artikel 2 ab)")
             sys.exit(0)
 
     logger.info(f"Gefundene Artikel zur Verarbeitung: {len(tasks)}")
@@ -365,8 +485,8 @@ def main():
         logger.info(f"  [{i}] {t.item_name} -> Video: '{t.video_path.name}', Bilder: {len(t.image_paths)}")
 
     all_rows: List[Dict[str, Any]] = []
-    all_measures: List[Dict[str, Any]] = []
     all_web_research: List[Dict[str, Any]] = []
+    item_results: Dict[str, Dict[str, Any]] = {}
     success_count = 0
 
     for idx, task in enumerate(tasks, 1):
@@ -377,14 +497,18 @@ def main():
                 image_paths=task.image_paths,
                 item_name=task.item_name
             )
+            item_results[task.item_name] = {
+                "status": state.status,
+                "detected_id": state.detected_id,
+                "source_path": str(state.source_dir) if state.source_dir else str(task.video_path.parent),
+                "archived_path": str(state.archived_path) if state.archived_path else None
+            }
             if state.status == "SUCCESS":
                 success_count += 1
                 
-                # Vollständige einheitliche Zeile mit allen JSON-Attributen extrahieren
                 unified_row = ExportService.build_unified_item_row_from_state(state)
                 all_rows.append(unified_row)
 
-                # Web-Research für konsolidiertes Sheet sammeln
                 ref_listings = (
                     getattr(state, "reference_listings", None)
                     or getattr(state, "discovered_web_sources", None)
@@ -394,28 +518,20 @@ def main():
                     web_rows = ExportService.build_web_research_rows(unified_row["id"], ref_listings)
                     all_web_research.extend(web_rows)
 
-                # Detaillierte Maßnahmen sammeln (für Sheet 3)
-                p4 = state.step4_preis_steigerer_json
-                if p4 and isinstance(p4, dict) and "massnahmen_bewertungen" in p4:
-                    massnahmen = p4["massnahmen_bewertungen"]
-                    if isinstance(massnahmen, list):
-                        for m in massnahmen:
-                            m_row = {
-                                "artikel_id": unified_row["id"],
-                                "artikel_titel": unified_row["titel"]
-                            }
-                            m_row.update(ExportService.flatten_record(m))
-                            all_measures.append(m_row)
-
         except Exception as e:
             logger.error(f"Fehler bei der Verarbeitung von '{task.item_name}': {e}")
+            item_results[task.item_name] = {
+                "status": "FAILED",
+                "error": str(e),
+                "source_path": str(task.video_path.parent),
+                "archived_path": None
+            }
 
-    # Gesamttabelle erstellen
+    # Gesamttabelle & automatischer eBay-Export erstellen
     if all_rows:
         summary_exporter = ExportService(execution_dir)
         summary_export = summary_exporter.export_consolidated_batch(
             items_rows=all_rows,
-            measures_rows=all_measures,
             web_research_rows=all_web_research,
             base_filename="consolidated_execution_results"
         )
@@ -423,6 +539,20 @@ def main():
         logger.info("📊 KONSOLIDIERTE GESAMTTABELLE ALLER ARTIKEL ERSTELLT:")
         logger.info(f"  📗 Excel: {summary_export['excel']}")
         logger.info(f"  📊 CSV:   {summary_export['csv']}")
+
+        # Automatischer eBay-Export (jeder Artikel wird direkt für eBay vorbereitet)
+        try:
+            ebay_svc = EbayService(settings=config.ebay, output_dir=execution_dir)
+            ebay_res = ebay_svc.export_ebay_batch(
+                items=all_rows,
+                output_dir=execution_dir,
+                filename_prefix="ebay_listings"
+            )
+            logger.info("🏛️ AUTOMATISCHER EBAY-EXPORT ERSTELLT:")
+            logger.info(f"  📄 eBay CSV (File Exchange): {ebay_res['csv']}")
+            logger.info(f"  📦 eBay JSON (API Payload):  {ebay_res['json']}")
+        except Exception as e:
+            logger.warning(f"Automatischer eBay-Export übersprungen: {e}")
 
     # Ausführungs-Manifest speichern
     manifest = {
@@ -434,7 +564,10 @@ def main():
             {
                 "item_name": t.item_name,
                 "video": str(t.video_path.name),
-                "images_count": len(t.image_paths)
+                "images_count": len(t.image_paths),
+                "status": item_results.get(t.item_name, {}).get("status", "UNKNOWN"),
+                "source_path": item_results.get(t.item_name, {}).get("source_path", str(t.video_path.parent)),
+                "archived_path": item_results.get(t.item_name, {}).get("archived_path")
             }
             for t in tasks
         ]
@@ -446,6 +579,7 @@ def main():
     logger.info(f"🎉 AUSFÜHRUNG BEENDET: {success_count}/{len(tasks)} Artikel erfolgreich verarbeitet.")
     logger.info(f"📁 Vollständiger Ausführungs-Ordner: {execution_dir}")
     logger.info("=" * 70)
+
 
 if __name__ == "__main__":
     main()

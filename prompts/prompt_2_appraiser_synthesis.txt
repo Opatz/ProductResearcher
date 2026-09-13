@@ -28,15 +28,26 @@ Gefundene Referenz-Listings:
 
 # SCHLICHTUNGS- UND BEWERTUNGSREGELN
 
-1. STRIKTE PRIORITÄT REALISIERTER VERKAUFSPREISE:
-   - Verifizierte realisierte Verkaufspreise (z. B. beendete eBay-Auktionen, Auktionszuschläge/Hammerpreise auf Dorotheum/LiveAuctioneers) haben strikten Vorrang vor reinen Angebotspreisen.
-   - Sie bilden das primäre Wertfundament für echte Marktliquidität.
+1. STRIKTE PRIORITÄT REALISIERTER VERKAUFSPREISE (MISCHFÄLLE):
+   - Verifizierte realisierte Verkaufspreise (`realisierter_verkaufspreis`, z. B. beendete eBay-Auktionen, Auktionszuschläge/Hammerpreise auf Dorotheum/LiveAuctioneers) haben strikten Vorrang vor reinen Angebotspreisen.
+   - Liegt mindestens ein realisierter Verkaufspreis vor, bilde die Basisbewertung primär auf den realisierten Verkäufen (Ankerfunktion). Aktive Angebotspreise werden in diesem Fall nicht zur Verwässerung herangezogen.
 
-2. BEHANDLUNG SPEKULATIVER HÄNDLER-ANGEBOTSPREISE:
+2. FALLBACK AUF AKTIVE ANGEBOTSPREISE (-15% PAUSCHALER SICHERHEITSABSCHLAG):
+   - Liegen für das Objekt KEINE beendeten Verkäufe vor (0 realisierte Verkaufspreise), nutze den Median der bereinigten aktiven Angebotspreise (`angebotspreis`) als Referenzbasis.
+   - Wende auf diesen bereinigten Angebots-Median einen pauschalen Sicherheitsabschlag von 15% an (um Verhandlungsspielraum und Verkäufer-Wunschpreise auszugleichen).
+   - Dokumentiere den Fallback zwingend transparent in `begruendung_preisfindung` (z. B. "Da keine beendeten Verkäufe vorlagen, wurde der Fallback auf aktive Angebotspreise mit 15% Sicherheitsabschlag angewendet.").
+
+3. ZERO-DATA ANTI-HALLUZINATIONS-POLICY (KEINE FANTASIEPREISE):
+   - Wenn im gesamten Web weder beendete Verkäufe noch aktive Angebote ermittelt werden konnten (`anzahl_gefundene_preise == 0` oder keine relevanten Modelltreffer):
+     * Setze `geschaetzter_retail_preis_eur` auf 0.0 (oder null), sowie `preisspanne_min_eur` und `preisspanne_max_eur` auf 0.0 (oder null).
+     * ERFINDE KEINE PREISE! Schätze keine Fantasiewerte aus dem Nichts.
+     * Vermerke in `begruendung_preisfindung`: "Keine empirischen Referenzpreise im Web ermittelt. Gemäß Zero-Data-Policy wurde keine automatische Preisschätzung vorgenommen. Manuelle Begutachtung erforderlich."
+
+4. BEHANDLUNG SPEKULATIVER HÄNDLER-ANGEBOTSPREISE:
    - Angebotspreise auf Händler- und Galerieplattformen (z. B. Pamono, 1stDibs) stellen unbestätigte Wunschpreise dar und linger oft monatelang unverkauft.
    - Behandle diese ausschließlich als spekulative Obergrenzen (Ceilings). Wenn keine realisierten Verkäufe diese Höhen stützen, wende einen deutlichen Händler-Abschlag (30% bis 60%) an oder schließe sie als Ausreißer aus.
 
-3. AUSREISSER-BEREINIGUNG & RELEVANZPRÜFUNG:
+5. AUSREISSER-BEREINIGUNG & RELEVANZPRÜFUNG:
    - Schließe irrelevante Treffer (`match_genauigkeit`: `kein_treffer`), grobe Modellabweichungen oder extreme statistische Ausreißer konsequent aus der Endpreisbildung aus.
    - Dokumentiere jede vorgenommene Bereinigung transparent in `ausreisser_bereinigung_notiz`.
 
