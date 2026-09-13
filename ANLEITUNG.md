@@ -16,19 +16,25 @@ Der gesamte Ablauf besteht aus 3 Schritten:
 
 ## 🛠️ Teil A: Einmalige Einrichtung (Nur beim ersten Mal)
 
-### Schritt 1: GitHub Account & GitHub Desktop
-Da das Programm in einem geschützten Bereich liegt, benötigst du einen kostenlosen GitHub-Zugang:
+### Schritt 1: GitHub Account & Freischaltung (Sehr wichtig!)
+Da das Programm in einem geschützten, privaten Bereich liegt, musst du erst vom Projektleiter freigeschaltet werden:
 
 1. **GitHub-Konto erstellen:**
-   - Gehe auf [github.com/signup](https://github.com/signup) und erstelle dir ein kostenloses Konto.
-   - Gib dem Projektleiter deinen GitHub-Benutzernamen, damit er dich für das Projekt freischaltet.
-2. **GitHub Desktop installieren:**
+   - Gehe auf [github.com/signup](https://github.com/signup) und erstelle dir ein kostenloses Konto mit deiner E-Mail-Adresse.
+2. **E-Mail & Benutzernamen an den Projektleiter senden:**
+   - **Ganz wichtig:** Teile dem Projektleiter (Mario) direkt deinen **GitHub-Benutzernamen** und deine **E-Mail-Adresse** mit!
+   - Er lädt dich dann zum privaten Repository ein.
+3. **Einladung annehmen:**
+   - Du erhältst von GitHub eine E-Mail mit der Einladung (Betreff: *"... invited you to ..."*).
+   - Öffne die E-Mail und klicke auf **"Accept Invitation"** (Einladung annehmen).
+   - *(Erst nach diesem Klick ist das Projekt für dich freigeschaltet und sichtbar!)*
+4. **GitHub Desktop installieren & Anmelden:**
    - Lade dir das Programm **[GitHub Desktop](https://desktop.github.com/)** herunter und installiere es.
-   - Öffne GitHub Desktop und melde dich mit deinem GitHub-Konto an.
-3. **Projekt auf deinen Computer laden (Klonen):**
-   - Klicke in GitHub Desktop auf **File** -> **Clone Repository...**
-   - Wähle das Projekt `AsiaWorkflow` / `ProductResearcher` aus.
-   - Wähle als Speicherort einen einfachen Pfad (z. B. `C:\Users\DeinName\Dokumente\AsiaWorkflow`).
+   - Öffne GitHub Desktop und melde dich mit deinen GitHub-Zugangsdaten an.
+5. **Projekt auf deinen Computer laden (Klonen):**
+   - Klicke in GitHub Desktop oben auf **File** -> **Clone Repository...**
+   - Wähle das Projekt `ProductResearcher` aus der Liste aus.
+   - Wähle als Speicherort einen einfachen Pfad (z. B. `C:\Users\DeinName\Dokumente\ProductResearcher`).
    - Klicke auf **Clone**.
 
 ---
