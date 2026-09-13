@@ -50,7 +50,10 @@ Damit die Skripte ausgeführt werden können, wird Python benötigt:
    ```text
    1_Erstinstallation_Setup.bat
    ```
-3. Das Skript richtet alles automatisch ein und legt dir **3 praktische Verknüpfungen direkt auf deinen Desktop**:
+3. Das Skript richtet alles automatisch ein und erstellt auf deinem Desktop einen aufgeräumten Ordner:
+   📁 **`Item Analyse`**
+   
+   Darin findest du deine 3 zentralen Verknüpfungen:
    - 📁 `1_Item_Scanner_Eingang` (Hier legst du künftig Fotos & Videos rein)
    - ⚡ `2_Starte_Analyse` (Hier machst du künftig den Doppelklick zum Starten)
    - 📊 `3_Item_Scanner_Ergebnisse` (Hier findest du deine fertigen Excel-Dateien)
@@ -92,11 +95,11 @@ Du nimmst 2 Artikel hintereinander mit dem Smartphone oder der Kamera auf:
 ## 🚀 Teil C: Täglicher Ablauf (Auswertung starten)
 
 1. **Dateien rüberkopieren:**
-   - Öffne den Ordner `1_Item_Scanner_Eingang` auf deinem Desktop.
+   - Öffne auf deinem Desktop den Ordner **`Item Analyse`** und darin **`1_Item_Scanner_Eingang`**.
    - Kopiere alle Fotos und Videos von deiner Kamera/Handy dort hinein.
 
 2. **Analyse starten:**
-   - Mache einen Doppelklick auf `2_Starte_Analyse` auf deinem Desktop.
+   - Mache im Desktop-Ordner **`Item Analyse`** einen Doppelklick auf **`2_Starte_Analyse`**.
    - Es öffnet sich ein schwarzes Fenster, das dir live anzeigt, was die KI gerade tut (Transkription, Webrecherche, Bewertung).
    - Pro Artikel dauert die Analyse ca. 1 bis 2 Minuten.
 

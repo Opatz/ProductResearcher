@@ -60,15 +60,17 @@ exit /b 1
 echo [OK] Alle Erweiterungen erfolgreich installiert!
 echo.
 
-:: 3. Verknuepfungen auf dem Desktop anlegen
-echo [3/3] Erstelle bequeme Desktop-Verknuepfungen...
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$ws = New-Object -ComObject WScript.Shell; $d = [Environment]::GetFolderPath('Desktop'); $c = (Get-Location).Path; $s1 = $ws.CreateShortcut((Join-Path $d '1_Item_Scanner_Eingang.lnk')); $s1.TargetPath = (Join-Path $c 'input\raw'); $s1.Description = 'Hier Rohfotos und Videos ablegen'; $s1.Save(); $s2 = $ws.CreateShortcut((Join-Path $d '2_Starte_Analyse.lnk')); $s2.TargetPath = (Join-Path $c '2_Starte_Analyse.bat'); $s2.WorkingDirectory = $c; $s2.Description = 'Startet die KI-Artikelanalyse'; $s2.Save(); $s3 = $ws.CreateShortcut((Join-Path $d '3_Item_Scanner_Ergebnisse.lnk')); $s3.TargetPath = (Join-Path $c 'output'); $s3.Description = 'Hier liegen die fertigen Excel-Dateien'; $s3.Save();"
+:: 3. Desktop-Ordner und Verknuepfungen anlegen
+echo [3/3] Erstelle Ordner 'Item Analyse' auf deinem Desktop...
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$ws = New-Object -ComObject WScript.Shell; $d = [Environment]::GetFolderPath('Desktop'); $c = (Get-Location).Path; $folder = Join-Path $d 'Item Analyse'; if (-not (Test-Path $folder)) { New-Item -ItemType Directory -Path $folder -Force | Out-Null }; $old1 = Join-Path $d '1_Item_Scanner_Eingang.lnk'; if (Test-Path $old1) { Remove-Item $old1 -Force }; $old2 = Join-Path $d '2_Starte_Analyse.lnk'; if (Test-Path $old2) { Remove-Item $old2 -Force }; $old3 = Join-Path $d '3_Item_Scanner_Ergebnisse.lnk'; if (Test-Path $old3) { Remove-Item $old3 -Force }; $s1 = $ws.CreateShortcut((Join-Path $folder '1_Item_Scanner_Eingang.lnk')); $s1.TargetPath = (Join-Path $c 'input\raw'); $s1.Description = 'Hier Rohfotos und Videos ablegen'; $s1.Save(); $s2 = $ws.CreateShortcut((Join-Path $folder '2_Starte_Analyse.lnk')); $s2.TargetPath = (Join-Path $c '2_Starte_Analyse.bat'); $s2.WorkingDirectory = $c; $s2.Description = 'Startet die KI-Artikelanalyse'; $s2.Save(); $s3 = $ws.CreateShortcut((Join-Path $folder '3_Item_Scanner_Ergebnisse.lnk')); $s3.TargetPath = (Join-Path $c 'output'); $s3.Description = 'Hier liegen die fertigen Excel-Dateien'; $s3.Save();"
 
-echo [OK] Folgende 3 Verknuepfungen wurden auf deinem Desktop angelegt:
+echo [OK] Auf deinem Desktop liegt nun der Ordner:
 echo.
-echo   * 1_Item_Scanner_Eingang    - Hier legst du deine Fotos und Videos rein
-echo   * 2_Starte_Analyse          - Doppelklick startet die Auswertung
-echo   * 3_Item_Scanner_Ergebnisse - Hier findest du die fertigen Excel-Dateien
+echo   [ Ordner: Item Analyse ]
+echo   Darin befinden sich deine 3 Arbeitsbereiche:
+echo     1. 1_Item_Scanner_Eingang    - Hier legst du deine Fotos und Videos rein
+echo     2. 2_Starte_Analyse          - Doppelklick startet die Auswertung
+echo     3. 3_Item_Scanner_Ergebnisse - Hier findest du die fertigen Excel-Dateien
 echo.
 echo ======================================================================
 echo   FERTIG! Die Einrichtung ist komplett abgeschlossen.
