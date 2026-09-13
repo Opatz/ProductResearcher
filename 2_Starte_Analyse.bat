@@ -1,10 +1,9 @@
 @echo off
-chcp 65001 >nul
-title 🤖 Item Researcher - Analyse & Bewertung
+title Item Researcher - Analyse und Bewertung
 cd /d "%~dp0"
 
 echo ======================================================================
-echo   🤖 ITEM RESEARCHER - ANALYSE WIRD GESTARTET
+echo   ITEM RESEARCHER - ANALYSE WIRD GESTARTET
 echo ======================================================================
 echo.
 echo Verarbeite abgelegte Fotos und Videos aus dem Eingangsordner...
@@ -24,12 +23,12 @@ if %EXIT_CODE% neq 0 (
 echo.
 echo ======================================================================
 if %EXIT_CODE% equ 0 (
-    echo   🎉 ANALYSE ERFOLGREICH BEENDET!
-    echo   Öffne den Ergebnis-Ordner mit den fertigen Excel-Dateien...
+    echo   ANALYSE ERFOLGREICH BEENDET!
+    echo   Oeffne den Ergebnis-Ordner mit den fertigen Excel-Dateien...
     echo ======================================================================
     start "" "%~dp0output"
 ) else (
-    echo   ❌ Es ist ein Fehler während der Ausführung aufgetreten.
+    echo   [FEHLER] Es ist ein Fehler waehrend der Ausfuehrung aufgetreten.
     echo ======================================================================
 )
 echo.

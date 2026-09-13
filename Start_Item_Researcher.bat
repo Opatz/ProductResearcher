@@ -1,7 +1,9 @@
 @echo off
-title Item Research & Marketplace Studio
+title Item Research and Marketplace Studio
+cd /d "%~dp0"
+
 echo ======================================================================
-echo   🏛️ Starting Item Research & Marketplace Studio...
+echo   Starting Item Research and Marketplace Studio...
 echo ======================================================================
 echo.
 python main.py --review-ui
